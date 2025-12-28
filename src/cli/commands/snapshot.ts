@@ -12,6 +12,7 @@ import { configManager } from '../../utils/config.js';
 import { Logger } from '../../utils/logger.js';
 import { validateDate } from '../../utils/validators.js';
 import { formatEuro } from '../../utils/formatters.js';
+import type { Snapshot, Holding } from '../../models/index.js';
 
 export const snapshotCommand = new Command('snapshot')
   .description('Manage portfolio snapshots')
@@ -32,6 +33,13 @@ export const snapshotCommand = new Command('snapshot')
       .description('View a specific snapshot')
       .argument('<date>', 'Snapshot date (YYYY-MM-DD)')
       .action(viewSnapshot)
+  )
+  .addCommand(
+    new Command('delete')
+      .description('Delete a snapshot or specific holding')
+      .argument('<date>', 'Snapshot date (YYYY-MM-DD)')
+      .argument('[asset-symbol]', 'Optional: Asset symbol to delete (e.g., BTC)')
+      .action(deleteSnapshot)
   );
 
 async function addSnapshot() {
@@ -671,4 +679,139 @@ async function viewSnapshot(date: string) {
     clack.outro('Failed to view snapshot');
     process.exit(1);
   }
+}
+
+async function deleteSnapshot(date: string, assetSymbol?: string) {
+  clack.intro('Delete Snapshot');
+
+  try {
+    const config = configManager.get();
+    const ledgerDb = DatabaseManager.getLedgerDb(config.database.ledgerPath);
+    const ledgerRepo = new LedgerRepository(ledgerDb);
+
+    if (!validateDate(date)) {
+      Logger.error('Invalid date format. Use YYYY-MM-DD');
+      DatabaseManager.closeAll();
+      clack.outro('Invalid date format');
+      process.exit(1);
+    }
+
+    const snapshot = ledgerRepo.getSnapshotByDate(date);
+    if (!snapshot) {
+      Logger.error(`No snapshot found for ${date}`);
+      DatabaseManager.closeAll();
+      clack.outro('Snapshot not found');
+      process.exit(1);
+    }
+
+    const holdings = ledgerRepo.getHoldingsBySnapshotId(snapshot.id);
+
+    if (assetSymbol) {
+      await deleteSingleHolding(date, assetSymbol, snapshot, holdings, ledgerRepo);
+    } else {
+      await deleteEntireSnapshot(date, snapshot, holdings, ledgerRepo);
+    }
+
+    DatabaseManager.closeAll();
+    clack.outro('Deletion successful!');
+  } catch (error) {
+    Logger.error(`Failed to delete: ${error instanceof Error ? error.message : String(error)}`);
+    DatabaseManager.closeAll();
+    clack.outro('Deletion failed');
+    process.exit(1);
+  }
+}
+
+async function deleteSingleHolding(
+  date: string,
+  assetSymbol: string,
+  snapshot: Snapshot,
+  holdings: Holding[],
+  ledgerRepo: LedgerRepository
+) {
+  const normalizedSymbol = assetSymbol.toUpperCase().trim();
+
+  const holding = holdings.find(h => h.asset_symbol === normalizedSymbol);
+
+  if (!holding) {
+    Logger.error(`Asset ${normalizedSymbol} not found in snapshot ${date}`);
+    console.log(pc.cyan('\nAvailable assets in this snapshot:'));
+    holdings.forEach(h => console.log(pc.cyan(`  - ${h.asset_symbol}`)));
+    DatabaseManager.closeAll();
+    clack.outro('Asset not found');
+    process.exit(1);
+  }
+
+  console.log(pc.yellow('\nYou are about to delete:'));
+  console.log(pc.cyan(`  Snapshot: ${date}`));
+  console.log(pc.cyan(`  Asset: ${holding.asset_symbol} (${holding.asset_name})`));
+  console.log(pc.cyan(`  Amount: ${holding.amount}`));
+  if (holding.acquisition_price_eur) {
+    console.log(pc.cyan(`  Acquisition Price: ${formatEuro(holding.acquisition_price_eur)}`));
+  }
+  if (holding.acquisition_date) {
+    console.log(pc.cyan(`  Acquisition Date: ${holding.acquisition_date}`));
+  }
+  console.log(pc.yellow(`\nRemaining assets after deletion: ${holdings.length - 1}`));
+  console.log();
+
+  const confirm = await clack.confirm({
+    message: `Delete ${normalizedSymbol} from snapshot ${date}?`,
+    initialValue: false,
+  });
+
+  if (clack.isCancel(confirm) || !confirm) {
+    clack.cancel('Operation cancelled');
+    DatabaseManager.closeAll();
+    process.exit(0);
+  }
+
+  ledgerRepo.deleteHolding(holding.id);
+  Logger.success(`Deleted ${normalizedSymbol} from snapshot ${date}`);
+
+  const remainingHoldings = ledgerRepo.getHoldingsBySnapshotId(snapshot.id);
+  if (remainingHoldings.length > 0) {
+    console.log(pc.bold('\nRemaining holdings:'));
+    remainingHoldings.forEach(h => {
+      console.log(pc.cyan(`  - ${h.asset_symbol}: ${h.amount}`));
+    });
+  } else {
+    console.log(pc.yellow('\nNote: This was the last holding. Consider deleting the entire snapshot.'));
+  }
+}
+
+async function deleteEntireSnapshot(
+  date: string,
+  snapshot: Snapshot,
+  holdings: Holding[],
+  ledgerRepo: LedgerRepository
+) {
+  console.log(pc.yellow('\nYou are about to delete:'));
+  console.log(pc.cyan(`  Snapshot: ${date}`));
+  if (snapshot.notes) {
+    console.log(pc.cyan(`  Notes: ${snapshot.notes}`));
+  }
+  console.log(pc.bold('\n  Holdings:'));
+  holdings.forEach(h => {
+    console.log(pc.cyan(`    - ${h.asset_symbol} (${h.asset_name}): ${h.amount}`));
+    if (h.acquisition_price_eur && h.acquisition_date) {
+      console.log(pc.cyan(`      Acquired at ${formatEuro(h.acquisition_price_eur)} on ${h.acquisition_date}`));
+    }
+  });
+  console.log(pc.red(`\nThis will delete the snapshot and all ${holdings.length} holding(s).`));
+  console.log();
+
+  const confirm = await clack.confirm({
+    message: `Delete entire snapshot for ${date}?`,
+    initialValue: false,
+  });
+
+  if (clack.isCancel(confirm) || !confirm) {
+    clack.cancel('Operation cancelled');
+    DatabaseManager.closeAll();
+    process.exit(0);
+  }
+
+  ledgerRepo.deleteSnapshot(snapshot.id);
+  Logger.success(`Deleted snapshot ${date} and all ${holdings.length} holding(s)`);
 }
