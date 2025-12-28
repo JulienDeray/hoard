@@ -6,6 +6,7 @@ import { LedgerRepository } from '../../database/ledger.js';
 import { RatesRepository } from '../../database/rates.js';
 import { CoinMarketCapService } from '../../services/coinmarketcap.js';
 import { PortfolioService } from '../../services/portfolio.js';
+import { AllocationService } from '../../services/allocation.js';
 import { ClaudeService } from '../../services/claude.js';
 import { QueryProcessor } from '../../services/query-processor.js';
 import { configManager } from '../../utils/config.js';
@@ -43,11 +44,14 @@ async function processQuery(question: string) {
       config.api.anthropic.model
     );
 
+    const allocationService = new AllocationService(ledgerRepo, portfolioService);
+
     const queryProcessor = new QueryProcessor(
       claudeService,
       portfolioService,
       ledgerRepo,
-      ratesRepo
+      ratesRepo,
+      allocationService
     );
 
     // Process the query

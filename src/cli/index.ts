@@ -5,6 +5,7 @@ import { config } from 'dotenv';
 import { snapshotCommand } from './commands/snapshot.js';
 import { queryCommand } from './commands/query.js';
 import { portfolioCommand } from './commands/portfolio.js';
+import { allocationCommand } from './commands/allocation.js';
 import { configManager } from '../utils/config.js';
 import { Logger } from '../utils/logger.js';
 
@@ -22,6 +23,7 @@ program
 program.addCommand(snapshotCommand);
 program.addCommand(queryCommand);
 program.addCommand(portfolioCommand);
+program.addCommand(allocationCommand);
 
 // Check configuration before running commands
 program.hook('preAction', (thisCommand) => {

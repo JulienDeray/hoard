@@ -6,6 +6,9 @@ import type {
   CreateHoldingInput,
   Asset,
   CreateAssetInput,
+  AllocationTarget,
+  CreateAllocationTargetInput,
+  UpdateAllocationTargetInput,
 } from '../models/index.js';
 
 export class LedgerRepository {
@@ -225,5 +228,96 @@ export class LedgerRepository {
     const holdings = this.getHoldingsBySnapshotId(snapshot.id);
 
     return { snapshot, holdings };
+  }
+
+  // Allocation Target operations
+  createAllocationTarget(input: CreateAllocationTargetInput): AllocationTarget {
+    const stmt = this.db.prepare(`
+      INSERT INTO allocation_targets (asset_symbol, target_percentage, notes)
+      VALUES (?, ?, ?)
+    `);
+
+    stmt.run(input.asset_symbol, input.target_percentage, input.notes || null);
+
+    return this.getAllocationTarget(input.asset_symbol)!;
+  }
+
+  getAllocationTarget(symbol: string): AllocationTarget | undefined {
+    const stmt = this.db.prepare(`
+      SELECT * FROM allocation_targets WHERE asset_symbol = ?
+    `);
+
+    return stmt.get(symbol) as AllocationTarget | undefined;
+  }
+
+  listAllocationTargets(): AllocationTarget[] {
+    const stmt = this.db.prepare(`
+      SELECT * FROM allocation_targets ORDER BY target_percentage DESC
+    `);
+
+    return stmt.all() as AllocationTarget[];
+  }
+
+  updateAllocationTarget(symbol: string, updates: UpdateAllocationTargetInput): void {
+    const fields: string[] = [];
+    const values: any[] = [];
+
+    if (updates.target_percentage !== undefined) {
+      fields.push('target_percentage = ?');
+      values.push(updates.target_percentage);
+    }
+    if (updates.notes !== undefined) {
+      fields.push('notes = ?');
+      values.push(updates.notes);
+    }
+
+    if (fields.length === 0) return;
+
+    values.push(symbol);
+
+    const stmt = this.db.prepare(`
+      UPDATE allocation_targets SET ${fields.join(', ')} WHERE asset_symbol = ?
+    `);
+
+    stmt.run(...values);
+  }
+
+  deleteAllocationTarget(symbol: string): void {
+    const stmt = this.db.prepare(`
+      DELETE FROM allocation_targets WHERE asset_symbol = ?
+    `);
+
+    stmt.run(symbol);
+  }
+
+  setAllocationTargets(targets: CreateAllocationTargetInput[]): void {
+    const transaction = this.db.transaction(() => {
+      // Clear existing targets
+      this.db.prepare('DELETE FROM allocation_targets').run();
+
+      // Insert new targets
+      const insert = this.db.prepare(`
+        INSERT INTO allocation_targets (asset_symbol, target_percentage, notes)
+        VALUES (?, ?, ?)
+      `);
+
+      for (const target of targets) {
+        insert.run(target.asset_symbol, target.target_percentage, target.notes || null);
+      }
+    });
+
+    transaction();
+  }
+
+  validateAllocationTargets(): { valid: boolean; sum: number; errors: string[] } {
+    const targets = this.listAllocationTargets();
+    const sum = targets.reduce((acc, t) => acc + t.target_percentage, 0);
+    const errors: string[] = [];
+
+    if (Math.abs(sum - 100) > 0.01) {
+      errors.push(`Allocation targets sum to ${sum.toFixed(2)}%, must equal 100%`);
+    }
+
+    return { valid: errors.length === 0, sum, errors };
   }
 }

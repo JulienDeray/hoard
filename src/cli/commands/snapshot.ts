@@ -7,6 +7,7 @@ import { LedgerRepository } from '../../database/ledger.js';
 import { RatesRepository } from '../../database/rates.js';
 import { CoinMarketCapService } from '../../services/coinmarketcap.js';
 import { PortfolioService } from '../../services/portfolio.js';
+import { AllocationService } from '../../services/allocation.js';
 import { configManager } from '../../utils/config.js';
 import { Logger } from '../../utils/logger.js';
 import { validateDate } from '../../utils/validators.js';
@@ -344,8 +345,8 @@ async function addSnapshot() {
               // Update cache
               ratesRepo.updateCachedRate(
                 holding.symbol,
-                config.defaults.baseCurrency,
-                price
+                price,
+                config.defaults.baseCurrency
               );
 
               // Update holding with acquisition price and date
@@ -589,6 +590,33 @@ async function viewSnapshot(date: string) {
           pc.green(valueStr) +
           pc.gray(` (@ ${priceStr})`)
       );
+      console.log();
+    }
+
+    // Show allocation comparison if targets exist
+    const allocationService = new AllocationService(ledgerRepo, portfolioService);
+    const allocationSummary = await allocationService.getAllocationSummary(date);
+
+    if (allocationSummary && allocationSummary.has_targets) {
+      console.log(pc.bold('Allocation vs Targets:'));
+
+      if (!allocationSummary.targets_sum_valid) {
+        console.log(pc.yellow('  ⚠ Warning: Targets do not sum to 100%'));
+      }
+
+      for (const alloc of allocationSummary.allocations) {
+        const arrow =
+          Math.abs(alloc.difference_percentage) <= 2
+            ? pc.green('✓')
+            : alloc.difference_percentage > 0
+              ? pc.red('▲')
+              : pc.yellow('▼');
+
+        console.log(
+          `  ${arrow} ${pc.bold(alloc.asset_symbol)}: ` +
+            `${alloc.current_percentage.toFixed(1)}% (target: ${alloc.target_percentage.toFixed(1)}%)`
+        );
+      }
       console.log();
     }
 

@@ -28,9 +28,13 @@ export class DatabaseManager {
   }
 
   private static runLedgerMigrations(db: Database.Database): void {
-    const migrationPath = join(__dirname, 'migrations', 'ledger', '001_initial.sql');
-    const migration = readFileSync(migrationPath, 'utf-8');
-    db.exec(migration);
+    const migrations = ['001_initial.sql', '002_allocation_targets.sql'];
+
+    for (const file of migrations) {
+      const migrationPath = join(__dirname, 'migrations', 'ledger', file);
+      const sql = readFileSync(migrationPath, 'utf-8');
+      db.exec(sql);
+    }
   }
 
   private static runRatesMigrations(db: Database.Database): void {

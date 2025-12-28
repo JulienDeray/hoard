@@ -57,6 +57,26 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
       properties: {},
     },
   },
+  {
+    name: 'suggest_rebalancing',
+    description:
+      'Suggest portfolio rebalancing actions based on allocation targets. Returns buy/sell amounts to match target allocations.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        date: {
+          type: 'string',
+          description:
+            'The snapshot date in YYYY-MM-DD format. Omit for current portfolio.',
+        },
+        tolerance: {
+          type: 'number',
+          description:
+            'Tolerance in percentage points. Assets within tolerance are considered balanced. Default: 2',
+        },
+      },
+    },
+  },
 ];
 
 export const SYSTEM_PROMPT = `You are a helpful assistant for a crypto portfolio tracking application.

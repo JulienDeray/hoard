@@ -6,6 +6,7 @@ import { LedgerRepository } from '../../database/ledger.js';
 import { RatesRepository } from '../../database/rates.js';
 import { CoinMarketCapService } from '../../services/coinmarketcap.js';
 import { PortfolioService } from '../../services/portfolio.js';
+import { AllocationService } from '../../services/allocation.js';
 import { configManager } from '../../utils/config.js';
 import { Logger } from '../../utils/logger.js';
 import { formatEuro } from '../../utils/formatters.js';
@@ -61,17 +62,48 @@ async function showSummary() {
         ? formatEuro(holding.current_price_eur)
         : 'N/A';
       const valueStr = holding.current_value_eur
-        ? pc.green(formatEuro(holding.current_value_eur))
-        : pc.gray('N/A');
+        ? formatEuro(holding.current_value_eur)
+        : 'N/A';
 
       const percentage = holding.current_value_eur
         ? ((holding.current_value_eur / summary.totalValue) * 100).toFixed(1)
         : '0.0';
 
       console.log(`  ${pc.bold(holding.asset_symbol)} (${holding.asset_name})`);
-      console.log(pc.gray(`    Amount: ${holding.amount}`));
-      console.log(pc.gray(`    Price: ${priceStr}`));
-      console.log(`    Value: ${valueStr} (${percentage}%)`);
+      console.log(
+        `    ${holding.amount} ${holding.asset_symbol}` +
+          pc.bold(' = ') +
+          pc.green(valueStr) +
+          pc.gray(` (@ ${priceStr})`) +
+          ` - ${percentage}%`
+      );
+      console.log();
+    }
+
+    // Show allocation comparison if targets exist
+    const allocationService = new AllocationService(ledgerRepo, portfolioService);
+    const allocationSummary = await allocationService.getAllocationSummary();
+
+    if (allocationSummary && allocationSummary.has_targets) {
+      console.log(pc.bold('Allocation vs Targets:'));
+
+      if (!allocationSummary.targets_sum_valid) {
+        console.log(pc.yellow('  ⚠ Warning: Targets do not sum to 100%'));
+      }
+
+      for (const alloc of allocationSummary.allocations) {
+        const arrow =
+          Math.abs(alloc.difference_percentage) <= 2
+            ? pc.green('✓')
+            : alloc.difference_percentage > 0
+              ? pc.red('▲')
+              : pc.yellow('▼');
+
+        console.log(
+          `  ${arrow} ${pc.bold(alloc.asset_symbol)}: ` +
+            `${alloc.current_percentage.toFixed(1)}% (target: ${alloc.target_percentage.toFixed(1)}%)`
+        );
+      }
       console.log();
     }
 

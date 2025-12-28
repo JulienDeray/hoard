@@ -1,5 +1,6 @@
 import { ClaudeService } from './claude.js';
 import { PortfolioService } from './portfolio.js';
+import { AllocationService } from './allocation.js';
 import { LedgerRepository } from '../database/ledger.js';
 import { RatesRepository } from '../database/rates.js';
 import { Logger } from '../utils/logger.js';
@@ -9,7 +10,8 @@ export class QueryProcessor {
     private claudeService: ClaudeService,
     private portfolioService: PortfolioService,
     private ledgerRepo: LedgerRepository,
-    private ratesRepo: RatesRepository
+    private ratesRepo: RatesRepository,
+    private allocationService: AllocationService
   ) {}
 
   async processQuery(userQuery: string): Promise<string> {
@@ -29,6 +31,9 @@ export class QueryProcessor {
 
           case 'list_snapshots':
             return this.listSnapshots();
+
+          case 'suggest_rebalancing':
+            return await this.suggestRebalancing(toolInput.date, toolInput.tolerance);
 
           default:
             throw new Error(`Unknown tool: ${toolName}`);
@@ -130,6 +135,35 @@ export class QueryProcessor {
         date: s.date,
         notes: s.notes,
         created_at: s.created_at,
+      })),
+    };
+  }
+
+  private async suggestRebalancing(date?: string, tolerance?: number): Promise<any> {
+    const suggestions = await this.allocationService.getRebalancingSuggestions(
+      date || undefined,
+      tolerance || 2
+    );
+
+    if (!suggestions) {
+      return {
+        error: 'No allocation targets set or no portfolio data available',
+      };
+    }
+
+    return {
+      date: suggestions.date,
+      total_value: suggestions.total_value,
+      currency: suggestions.currency,
+      is_balanced: suggestions.is_balanced,
+      actions: suggestions.actions.map((action) => ({
+        asset: action.asset_symbol,
+        name: action.asset_name,
+        action: action.action,
+        amount_eur: action.amount_eur,
+        current_percentage: action.current_percentage,
+        target_percentage: action.target_percentage,
+        difference_percentage: action.current_percentage - action.target_percentage,
       })),
     };
   }
