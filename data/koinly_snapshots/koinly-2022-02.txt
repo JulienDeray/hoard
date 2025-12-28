@@ -1,0 +1,46 @@
+Feb 1, 2022
+BORG
+92 607,0670
+0,54 € / unit
+EURT
+EURT
+24 702
+BTC
+0,7162
+34 438,57 € / unit
+ETH
+10,1578
+2 405,79 € / unit
+BNB
+48,0558
+337,12 € / unit
+USDC
+12 851,4675
+0,90 € / unit
+MATIC
+2 453,1271
+1,47 € / unit
+MSOL
+6,3362
+91,73 € / unit
+AAVE
+2,3915
+141,05 € / unit
+MANA
+99,7158
+2,55 € / unit
+ENJ
+110,8922
+1,70 € / unit
+CHZ
+1 102,8656
+0,17 € / unit
+DOT
+9,4145
+17,37 € / unit
+SAND
+40,1485
+3,68 € / unit
+AUDIO
+137,4901
+0,82 € / unit

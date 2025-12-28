@@ -1,0 +1,43 @@
+Dec 1, 2021
+ETH
+13,0517
+4 101,84 € / unit
+BTC
+1,0505
+50 418,31 € / unit
+BORG
+77 833,8480
+0,62 € / unit
+EURT
+EURT
+25 528
+BNB
+5,4763
+551,57 € / unit
+MATIC
+1 028,9930
+1,58 € / unit
+MSOL
+6,6362
+188,54 € / unit
+AAVE
+2,3915
+228,61 € / unit
+CHZ
+1 102,8656
+0,39 € / unit
+CRV
+83,1867
+4,34 € / unit
+ENJ
+110,8922
+3,09 € / unit
+AUDIO
+137,4901
+2,03 € / unit
+COMP
+1,0656
+246,83 € / unit
+DOT
+7,2048
+33,61 € / unit

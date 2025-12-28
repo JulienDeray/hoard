@@ -1,0 +1,73 @@
+Jan 1, 2024
+SOL
+231,4853
+91,61 € / unit
+BTC
+0,5134
+38 223,28 € / unit
+ETH
+9,1843
+2 063,69 € / unit
+BORG
+59 206,7375
+0,17 € / unit
+AVAX
+162,5688
+34,92 € / unit
+DOT
+425,6371
+7,40 € / unit
+BNB
+8,1343
+282,70 € / unit
+MATIC
+2 495,5292
+0,88 € / unit
+USDC
+689,1573
+0,90 € / unit
+ARB
+102,8055
+1,41 € / unit
+LINK
+7,9739
+13,53 € / unit
+FIL
+15,8968
+6,23 € / unit
+JITO
+JTO
+96
+INJ
+2,8332
+32,40 € / unit
+GNS
+18,8201
+4,45 € / unit
+UNI
+11,8552
+6,55 € / unit
+STG
+140,2884
+0,55 € / unit
+GMX
+GMX
+76
+DOGE
+930,3610
+0,081 € / unit
+IMX
+36,7578
+1,93 € / unit
+DYDX
+26,1800
+2,65 € / unit
+CRV
+114,7892
+0,55 € / unit
+RUNE
+12,5760
+4,70 € / unit
+BONK
+4 544 282,3284
+0 €.04119 / unit

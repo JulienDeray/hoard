@@ -1,0 +1,70 @@
+Nov 1, 2022
+BORG
+161 177,9871
+0,22 € / unit
+EURT
+EURT
+30 981
+ETH
+10,8792
+1 577,31 € / unit
+BTC
+0,7942
+20 575,31 € / unit
+BNB
+43,5782
+328,64 € / unit
+USDC
+14 140,6738
+1,00 € / unit
+USDT
+9 925,7748
+1,00 € / unit
+DAI
+9 843,1105
+1,00 € / unit
+SAND
+1 199,1838
+0,88 € / unit
+SWEAT
+30 486,1129
+0,018 € / unit
+ATOM
+21,6034
+14,36 € / unit
+DOT
+44,1449
+6,66 € / unit
+MATIC
+315,4907
+0,91 € / unit
+SCRT
+311,7130
+0,91 € / unit
+MSOL
+6,3362
+35,18 € / unit
+KSM
+6,1345
+35,07 € / unit
+MINA
+304,7436
+0,69 € / unit
+AVAX
+7,9903
+19,43 € / unit
+CELO
+205,1063
+0,75 € / unit
+NEAR
+49,2846
+3,12 € / unit
+SOL
+4,4691
+32,82 € / unit
+ADA
+351,2976
+0,41 € / unit
+SHIB
+2 349 653,4800
+0 €.04125 / unit
