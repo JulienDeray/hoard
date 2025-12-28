@@ -20,7 +20,13 @@ export const snapshotCommand = new Command('snapshot')
       .description('Add a new portfolio snapshot')
       .action(addSnapshot)
   )
-  .addCommand(new Command('list').description('List all snapshots').action(listSnapshots))
+  .addCommand(
+    new Command('list')
+      .description('List all snapshots')
+      .option('--assets <symbols>', 'Comma-separated list of asset symbols to display (e.g., BTC,ETH,SOL)')
+      .option('--last <n>', 'Show only the last N snapshots', parseInt)
+      .action(listSnapshots)
+  )
   .addCommand(
     new Command('view')
       .description('View a specific snapshot')
@@ -466,7 +472,7 @@ async function addSnapshot() {
   }
 }
 
-async function listSnapshots() {
+async function listSnapshots(options: { assets?: string; last?: number }) {
   clack.intro('Portfolio Snapshots');
 
   try {
@@ -474,16 +480,24 @@ async function listSnapshots() {
     const ledgerDb = DatabaseManager.getLedgerDb(config.database.ledgerPath);
     const ledgerRepo = new LedgerRepository(ledgerDb);
 
-    const snapshots = ledgerRepo.listSnapshots();
+    const allSnapshots = ledgerRepo.listSnapshots();
+    const totalSnapshots = allSnapshots.length;
 
-    if (snapshots.length === 0) {
+    if (allSnapshots.length === 0) {
       Logger.info('No snapshots found');
       DatabaseManager.closeAll();
       clack.outro('No snapshots to display');
       return;
     }
 
-    // Get all unique asset symbols across all snapshots
+    // Apply --last filter to show only recent N snapshots
+    // Note: snapshots are returned in DESC order (newest first) from the database
+    let snapshots = allSnapshots;
+    if (options.last && options.last > 0) {
+      snapshots = snapshots.slice(0, options.last);
+    }
+
+    // Get all unique asset symbols across filtered snapshots
     const allAssets = new Set<string>();
     const snapshotData = snapshots.map((snapshot) => {
       const holdings = ledgerRepo.getHoldingsBySnapshotId(snapshot.id);
@@ -496,10 +510,30 @@ async function listSnapshots() {
       return { snapshot, holdingsMap };
     });
 
-    const assetSymbols = Array.from(allAssets).sort();
+    // Apply --assets filter to show only specific assets
+    let assetSymbols = Array.from(allAssets).sort();
+    if (options.assets) {
+      const requestedAssets = options.assets.split(',').map((s) => s.trim().toUpperCase());
+      assetSymbols = assetSymbols.filter((symbol) => requestedAssets.includes(symbol));
 
-    // Build table
+      if (assetSymbols.length === 0) {
+        Logger.error('None of the requested assets were found in the snapshots');
+        DatabaseManager.closeAll();
+        clack.outro('No matching assets found');
+        return;
+      }
+    }
+
+    // Build horizontal table (dates as rows, assets as columns)
     console.log(pc.bold(`\nPortfolio Snapshots:\n`));
+
+    // Show filter info if filters are applied
+    if (options.assets || options.last) {
+      const filters: string[] = [];
+      if (options.assets) filters.push(`assets: ${assetSymbols.join(', ')}`);
+      if (options.last) filters.push(`last ${options.last} snapshot(s)`);
+      console.log(pc.cyan(`Filters: ${filters.join(', ')}\n`));
+    }
 
     // Header row
     const dateColWidth = 12;
@@ -525,7 +559,10 @@ async function listSnapshots() {
     console.log();
 
     DatabaseManager.closeAll();
-    clack.outro(`Found ${snapshots.length} snapshot(s)`);
+    const filterInfo = snapshots.length < totalSnapshots
+      ? ` (${snapshots.length} of ${totalSnapshots} total)`
+      : '';
+    clack.outro(`Found ${snapshots.length} snapshot(s)${filterInfo}`);
   } catch (error) {
     Logger.error(`Failed to list snapshots: ${error instanceof Error ? error.message : String(error)}`);
     DatabaseManager.closeAll();
