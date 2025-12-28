@@ -10,6 +10,7 @@ import { AllocationService } from '../../services/allocation.js';
 import { configManager } from '../../utils/config.js';
 import { Logger } from '../../utils/logger.js';
 import { formatEuro } from '../../utils/formatters.js';
+import { getCurrentEnvironment } from '../index.js';
 import type { CreateAllocationTargetInput } from '../../models/index.js';
 
 export const allocationCommand = new Command('allocation')
@@ -34,7 +35,8 @@ async function setAllocationTargets() {
   clack.intro('Set Allocation Targets');
 
   try {
-    const config = configManager.get();
+    const env = getCurrentEnvironment();
+    const config = configManager.getWithEnvironment(env);
     const ledgerDb = DatabaseManager.getLedgerDb(config.database.ledgerPath);
     const ledgerRepo = new LedgerRepository(ledgerDb);
 
@@ -163,7 +165,8 @@ async function viewAllocationTargets() {
   clack.intro('Allocation Targets');
 
   try {
-    const config = configManager.get();
+    const env = getCurrentEnvironment();
+    const config = configManager.getWithEnvironment(env);
     const ledgerDb = DatabaseManager.getLedgerDb(config.database.ledgerPath);
     const ledgerRepo = new LedgerRepository(ledgerDb);
 
@@ -212,7 +215,8 @@ async function compareAllocations(options: { date?: string }) {
   spinner.start('Loading portfolio and targets...');
 
   try {
-    const config = configManager.get();
+    const env = getCurrentEnvironment();
+    const config = configManager.getWithEnvironment(env);
     const ledgerDb = DatabaseManager.getLedgerDb(config.database.ledgerPath);
     const ratesDb = DatabaseManager.getRatesDb(config.database.ratesPath);
     const ledgerRepo = new LedgerRepository(ledgerDb);
@@ -304,7 +308,8 @@ async function clearAllocationTargets() {
   clack.intro('Clear Allocation Targets');
 
   try {
-    const config = configManager.get();
+    const env = getCurrentEnvironment();
+    const config = configManager.getWithEnvironment(env);
     const ledgerDb = DatabaseManager.getLedgerDb(config.database.ledgerPath);
     const ledgerRepo = new LedgerRepository(ledgerDb);
 

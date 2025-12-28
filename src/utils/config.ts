@@ -1,13 +1,14 @@
 import Conf from 'conf';
 import { z } from 'zod';
 import { join } from 'path';
-import { homedir } from 'os';
 import { config as loadEnv } from 'dotenv';
+import { existsSync, mkdirSync } from 'fs';
 
 // Load environment variables early
 loadEnv();
 
 const configSchema = z.object({
+  environment: z.enum(['dev', 'prod']).default('dev'),
   api: z.object({
     coinmarketcap: z.object({
       apiKey: z.string().default(''),
@@ -44,14 +45,26 @@ class ConfigManager {
     });
   }
 
-  get(): AppConfig {
+  getWithEnvironment(env?: 'dev' | 'prod'): AppConfig {
     const config = this.conf.store;
 
-    // Apply defaults and validate
+    // Resolve environment: CLI flag > config file > default 'dev'
+    const resolvedEnv = env || (config.environment as 'dev' | 'prod') || 'dev';
+
+    // Build environment-specific paths
+    const envDataDir = join(process.cwd(), 'data', resolvedEnv);
+
+    // Ensure environment directory exists
+    if (!existsSync(envDataDir)) {
+      mkdirSync(envDataDir, { recursive: true });
+    }
+
+    // Apply defaults with environment-aware paths
     const defaultConfig: Partial<AppConfig> = {
+      environment: resolvedEnv,
       database: {
-        ledgerPath: join(process.cwd(), 'data', 'ledger.db'),
-        ratesPath: join(process.cwd(), 'data', 'rates.db'),
+        ledgerPath: join(envDataDir, 'ledger.db'),
+        ratesPath: join(envDataDir, 'rates.db'),
       },
       defaults: {
         baseCurrency: 'EUR',
@@ -71,10 +84,12 @@ class ConfigManager {
     };
 
     // Merge config with environment variables taking precedence
+    // Note: database paths are always environment-aware, not from stored config
     const mergedConfig = {
       ...defaultConfig,
       ...config,
-      database: { ...defaultConfig.database, ...config.database },
+      environment: resolvedEnv,
+      database: defaultConfig.database, // Always use environment-aware paths
       defaults: { ...defaultConfig.defaults, ...config.defaults },
       cache: { ...defaultConfig.cache, ...config.cache },
       api: {
@@ -115,8 +130,16 @@ class ConfigManager {
     return result.data;
   }
 
+  get(): AppConfig {
+    return this.getWithEnvironment();
+  }
+
   set<K extends keyof AppConfig>(key: K, value: AppConfig[K]): void {
     this.conf.set(key, value);
+  }
+
+  setEnvironment(env: 'dev' | 'prod'): void {
+    this.set('environment', env);
   }
 
   has(key: keyof AppConfig): boolean {

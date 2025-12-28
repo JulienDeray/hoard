@@ -11,6 +11,7 @@ import { ClaudeService } from '../../services/claude.js';
 import { QueryProcessor } from '../../services/query-processor.js';
 import { configManager } from '../../utils/config.js';
 import { Logger } from '../../utils/logger.js';
+import { getCurrentEnvironment } from '../index.js';
 
 export const queryCommand = new Command('query')
   .description('Ask natural language questions about your crypto portfolio')
@@ -24,7 +25,8 @@ async function processQuery(question: string) {
   spinner.start('Processing your query...');
 
   try {
-    const config = configManager.get();
+    const env = getCurrentEnvironment();
+    const config = configManager.getWithEnvironment(env);
 
     // Initialize services
     const ledgerDb = DatabaseManager.getLedgerDb(config.database.ledgerPath);

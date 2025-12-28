@@ -10,6 +10,7 @@ import { AllocationService } from '../../services/allocation.js';
 import { configManager } from '../../utils/config.js';
 import { Logger } from '../../utils/logger.js';
 import { formatEuro } from '../../utils/formatters.js';
+import { getCurrentEnvironment } from '../index.js';
 
 export const portfolioCommand = new Command('portfolio')
   .description('Portfolio analysis and reporting')
@@ -26,7 +27,8 @@ async function showSummary() {
   spinner.start('Loading portfolio...');
 
   try {
-    const config = configManager.get();
+    const env = getCurrentEnvironment();
+    const config = configManager.getWithEnvironment(env);
 
     const ledgerDb = DatabaseManager.getLedgerDb(config.database.ledgerPath);
     const ratesDb = DatabaseManager.getRatesDb(config.database.ratesPath);

@@ -9,9 +9,17 @@ const __dirname = dirname(__filename);
 export class DatabaseManager {
   private static ledgerDbInstance: Database.Database | null = null;
   private static ratesDbInstance: Database.Database | null = null;
+  private static currentLedgerPath: string | null = null;
+  private static currentRatesPath: string | null = null;
 
   static getLedgerDb(path: string): Database.Database {
+    // If path changed, close old instance
+    if (this.ledgerDbInstance && this.currentLedgerPath !== path) {
+      this.closeLedgerDb();
+    }
+
     if (!this.ledgerDbInstance) {
+      this.currentLedgerPath = path;
       this.ledgerDbInstance = new Database(path);
       this.ledgerDbInstance.pragma('foreign_keys = ON');
       this.runLedgerMigrations(this.ledgerDbInstance);
@@ -20,7 +28,13 @@ export class DatabaseManager {
   }
 
   static getRatesDb(path: string): Database.Database {
+    // If path changed, close old instance
+    if (this.ratesDbInstance && this.currentRatesPath !== path) {
+      this.closeRatesDb();
+    }
+
     if (!this.ratesDbInstance) {
+      this.currentRatesPath = path;
       this.ratesDbInstance = new Database(path);
       this.runRatesMigrations(this.ratesDbInstance);
     }
@@ -47,6 +61,7 @@ export class DatabaseManager {
     if (this.ledgerDbInstance) {
       this.ledgerDbInstance.close();
       this.ledgerDbInstance = null;
+      this.currentLedgerPath = null;
     }
   }
 
@@ -54,6 +69,7 @@ export class DatabaseManager {
     if (this.ratesDbInstance) {
       this.ratesDbInstance.close();
       this.ratesDbInstance = null;
+      this.currentRatesPath = null;
     }
   }
 

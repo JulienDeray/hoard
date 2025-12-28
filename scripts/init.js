@@ -24,11 +24,20 @@ const COMMON_ASSETS = [
     { symbol: 'ALGO', name: 'Algorand', cmc_id: 4030 },
 ];
 async function init() {
-    console.log(pc.bold('\n🚀 Initializing Crypto Tracker\n'));
+    // Parse environment from CLI args
+    const args = process.argv.slice(2);
+    const envArg = args.find((arg) => arg.startsWith('--env='));
+    const environment = (envArg ? envArg.split('=')[1] : 'dev');
+    // Validate environment
+    if (environment && !['dev', 'prod'].includes(environment)) {
+        console.error(pc.red(`Invalid environment: ${environment}. Must be 'dev' or 'prod'`));
+        process.exit(1);
+    }
+    console.log(pc.bold(`\n🚀 Initializing Crypto Tracker (${environment} environment)\n`));
     // Step 1: Create data directory
     const spinner = clack.spinner();
     spinner.start('Creating data directory...');
-    const dataDir = join(process.cwd(), 'data');
+    const dataDir = join(process.cwd(), 'data', environment);
     try {
         if (!existsSync(dataDir)) {
             mkdirSync(dataDir, { recursive: true });
@@ -68,7 +77,7 @@ async function init() {
     // Step 3: Initialize databases
     spinner.start('Initializing databases...');
     try {
-        const config = configManager.get();
+        const config = configManager.getWithEnvironment(environment);
         const ledgerDb = DatabaseManager.getLedgerDb(config.database.ledgerPath);
         const ratesDb = DatabaseManager.getRatesDb(config.database.ratesPath);
         spinner.stop('Databases initialized');
@@ -83,7 +92,7 @@ async function init() {
     // Step 4: Seed common crypto assets
     spinner.start('Seeding common crypto assets...');
     try {
-        const config = configManager.get();
+        const config = configManager.getWithEnvironment(environment);
         const ledgerDb = DatabaseManager.getLedgerDb(config.database.ledgerPath);
         const ledgerRepo = new LedgerRepository(ledgerDb);
         let added = 0;
