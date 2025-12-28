@@ -12,6 +12,7 @@
     "dev": "tsx src/cli/index.ts",
     "start": "node dist/cli/index.js",
     "init": "tsx scripts/init.ts",
+    "import-koinly": "tsx scripts/import-koinly.ts",
     "test": "vitest",
     "test:ui": "vitest --ui",
     "lint": "eslint src/",

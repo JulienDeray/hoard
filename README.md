@@ -92,6 +92,27 @@ View your current portfolio with live prices:
 npm run dev portfolio summary
 ```
 
+### Importing Historical Data
+
+Import historical snapshots from Koinly:
+
+```bash
+# Preview import without making changes
+npm run import-koinly -- --dry-run
+
+# Import all Koinly snapshot files
+npm run import-koinly
+
+# Import and overwrite existing snapshots
+npm run import-koinly -- --force
+```
+
+See [docs/koinly-import.md](docs/koinly-import.md) for detailed import guide, including:
+- How to create Koinly snapshot files from clipboard data
+- File format specification
+- Edge case handling
+- Asset enrichment workflow
+
 ## Project Structure
 
 ```

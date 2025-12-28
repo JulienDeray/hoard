@@ -287,3 +287,21 @@ Each feature should have:
 - Close database connections in finally blocks
 - Validate user input with Zod schemas
 - Handle errors gracefully with user-friendly messages
+
+### CLI Output Colors (picocolors)
+
+**IMPORTANT:** Never use `pc.gray()` for terminal output in this project - it's hard to read.
+
+Approved color scheme:
+- `pc.cyan()` - informational messages, details, paths, supplementary info
+- `pc.green()` - success messages, confirmations
+- `pc.yellow()` - warnings, skipped items, things that need attention
+- `pc.red()` - errors, failures
+- `pc.bold()` - headings, emphasis
+- `pc.dim()` - avoid using, use cyan instead
+
+When writing CLI output:
+- Use cyan for any detailed/secondary information (file paths, line numbers, asset names, etc.)
+- Reserve yellow for actual warnings/cautions
+- Use green for successful operations
+- Use red for errors only
