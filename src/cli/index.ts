@@ -7,6 +7,7 @@ import { queryCommand } from './commands/query.js';
 import { portfolioCommand } from './commands/portfolio.js';
 import { allocationCommand } from './commands/allocation.js';
 import { envCommand } from './commands/env.js';
+import { migrateCommand } from './commands/migrate.js';
 import { configManager } from '../utils/config.js';
 import { Logger } from '../utils/logger.js';
 
@@ -27,6 +28,7 @@ program.addCommand(queryCommand);
 program.addCommand(portfolioCommand);
 program.addCommand(allocationCommand);
 program.addCommand(envCommand);
+program.addCommand(migrateCommand);
 
 // Utility function to access current environment from global context
 export function getCurrentEnvironment(): 'dev' | 'prod' {

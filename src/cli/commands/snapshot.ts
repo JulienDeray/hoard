@@ -13,7 +13,7 @@ import { Logger } from '../../utils/logger.js';
 import { validateDate } from '../../utils/validators.js';
 import { formatEuro } from '../../utils/formatters.js';
 import { getCurrentEnvironment } from '../index.js';
-import type { Snapshot, Holding } from '../../models/index.js';
+import type { Snapshot, HoldingWithAsset, Asset } from '../../models/index.js';
 
 export const snapshotCommand = new Command('snapshot')
   .description('Manage portfolio snapshots')
@@ -77,7 +77,7 @@ async function addSnapshot() {
       // Snapshot exists, ask if user wants to add to it
       const existingHoldings = ledgerRepo.getHoldingsBySnapshotId(snapshot.id);
       console.log(pc.yellow(`\nSnapshot already exists for ${date}`));
-      console.log(pc.gray(`Current holdings: ${existingHoldings.length} asset(s)`));
+      console.log(pc.cyan(`Current holdings: ${existingHoldings.length} asset(s)`));
 
       const addToExisting = await clack.confirm({
         message: 'Add more holdings to this snapshot?',
@@ -112,20 +112,19 @@ async function addSnapshot() {
 
     // Get available assets and existing holdings
     const assets = ledgerRepo.listAssets();
-    const assetSymbols = assets.map((a) => a.symbol);
     const existingHoldings = ledgerRepo.getHoldingsBySnapshotId(snapshot.id);
     const existingSymbols = new Set(existingHoldings.map((h) => h.asset_symbol));
 
     // Show existing holdings if any
     if (existingHoldings.length > 0) {
-      console.log(pc.gray('Existing holdings:'));
+      console.log(pc.cyan('Existing holdings:'));
       existingHoldings.forEach((h) => {
-        console.log(pc.gray(`  - ${h.asset_symbol}: ${h.amount}`));
+        console.log(pc.cyan(`  - ${h.asset_symbol}: ${h.amount}`));
       });
       console.log();
     }
 
-    const holdings: Array<{ symbol: string; name: string; amount: number }> = [];
+    const holdings: Array<{ asset: Asset; amount: number }> = [];
 
     while (true) {
       const symbolInput = await clack.text({
@@ -151,7 +150,7 @@ async function addSnapshot() {
       if (!symbol) break;
 
       // Get asset info
-      let asset = ledgerRepo.getAsset(symbol);
+      let asset = ledgerRepo.getAssetBySymbol(symbol);
       if (!asset) {
         // Asset not found, offer to add it
         console.log(pc.yellow(`\n${symbol} not found in database.`));
@@ -247,18 +246,19 @@ async function addSnapshot() {
           continue;
         }
 
-        // Add asset to database
+        // Add asset to database with new schema
         asset = ledgerRepo.createAsset({
           symbol: assetInfo.symbol,
           name: assetInfo.name,
-          cmc_id: assetInfo.id,
+          external_id: assetInfo.id.toString(),
+          asset_class: 'CRYPTO',
+          valuation_source: 'CMC',
         });
 
         Logger.success(`Added ${assetInfo.name} (${assetInfo.symbol}) to database`);
 
         // Update available assets list
         assets.push(asset);
-        assetSymbols.push(asset.symbol);
       }
 
       // Check if asset already exists in this snapshot
@@ -318,16 +318,14 @@ async function addSnapshot() {
       const amount = parseFloat(amountInput);
 
       holdings.push({
-        symbol: asset.symbol,
-        name: asset.name,
+        asset,
         amount,
       });
 
-      // Create holding
+      // Create holding with asset_id (new schema)
       ledgerRepo.createHolding({
         snapshot_id: snapshot.id,
-        asset_symbol: asset.symbol,
-        asset_name: asset.name,
+        asset_id: asset.id,
         amount,
       });
 
@@ -340,11 +338,11 @@ async function addSnapshot() {
       return;
     }
 
-    // If snapshot date is today, fetch and save current prices as acquisition prices
+    // If snapshot date is today, fetch and save current prices
     const today = format(new Date(), 'yyyy-MM-dd');
     if (date === today) {
       const spinner = clack.spinner();
-      spinner.start('Fetching current prices for acquisition tracking...');
+      spinner.start('Fetching current prices...');
       try {
         const ratesDb = DatabaseManager.getRatesDb(config.database.ratesPath);
         const ratesRepo = new RatesRepository(ratesDb, config.cache.rateCacheTTL);
@@ -353,38 +351,37 @@ async function addSnapshot() {
         for (const holding of holdings) {
           try {
             const price = await cmcService.getCurrentPrice(
-              holding.symbol,
+              holding.asset.symbol,
               config.defaults.baseCurrency
             );
 
             if (price) {
               // Update cache
               ratesRepo.updateCachedRate(
-                holding.symbol,
+                holding.asset.symbol,
                 price,
                 config.defaults.baseCurrency
               );
 
-              // Update holding with acquisition price and date
+              // Update holding with computed value_eur
               const dbHolding = ledgerRepo
                 .getHoldingsBySnapshotId(snapshot.id)
-                .find((h) => h.asset_symbol === holding.symbol);
+                .find((h) => h.asset_symbol === holding.asset.symbol);
 
               if (dbHolding) {
                 ledgerRepo.updateHolding(dbHolding.id, {
-                  acquisition_price_eur: price,
-                  acquisition_date: date,
+                  value_eur: holding.amount * price,
                 });
               }
             }
           } catch (error) {
             spinner.stop(
-              `Could not fetch price for ${holding.symbol}: ${error instanceof Error ? error.message : String(error)}`
+              `Could not fetch price for ${holding.asset.symbol}: ${error instanceof Error ? error.message : String(error)}`
             );
           }
         }
 
-        spinner.stop('Current prices saved as acquisition prices');
+        spinner.stop('Current prices saved');
       } catch (error) {
         spinner.stop('Failed to fetch prices');
         Logger.error(error instanceof Error ? error.message : String(error));
@@ -399,7 +396,7 @@ async function addSnapshot() {
     }
     console.log(pc.bold('  Assets:'));
     holdings.forEach((h) => {
-      console.log(`    - ${pc.cyan(h.symbol)}: ${h.amount}`);
+      console.log(`    - ${pc.cyan(h.asset.symbol)}: ${h.amount}`);
     });
 
     // Display portfolio value (prices already fetched for today's snapshots)
@@ -453,7 +450,7 @@ async function addSnapshot() {
             config.defaults.baseCurrency
           );
 
-          await portfolioService.fetchAndCachePrices(holdings.map((h) => h.symbol));
+          await portfolioService.fetchAndCachePrices(holdings.map((h) => h.asset.symbol));
 
           // Get portfolio value
           const summary = await portfolioService.getPortfolioValue(date);
@@ -611,7 +608,7 @@ async function viewSnapshot(date: string) {
 
     console.log(pc.bold(`\nSnapshot: ${snapshot.date}\n`));
     if (snapshot.notes) {
-      console.log(pc.gray(`Notes: ${snapshot.notes}\n`));
+      console.log(pc.cyan(`Notes: ${snapshot.notes}\n`));
     }
 
     const summary = await portfolioService.getPortfolioValue(date);
@@ -637,7 +634,7 @@ async function viewSnapshot(date: string) {
         `    ${holding.amount} ${holding.asset_symbol}` +
           pc.bold(' = ') +
           pc.green(valueStr) +
-          pc.gray(` (@ ${priceStr})`)
+          pc.cyan(` (@ ${priceStr})`)
       );
       console.log();
     }
@@ -654,15 +651,14 @@ async function viewSnapshot(date: string) {
       }
 
       for (const alloc of allocationSummary.allocations) {
-        const arrow =
-          Math.abs(alloc.difference_percentage) <= 2
-            ? pc.green('✓')
-            : alloc.difference_percentage > 0
-              ? pc.red('▲')
-              : pc.yellow('▼');
+        const arrow = alloc.is_within_tolerance
+          ? pc.green('✓')
+          : alloc.difference_percentage > 0
+            ? pc.red('▲')
+            : pc.yellow('▼');
 
         console.log(
-          `  ${arrow} ${pc.bold(alloc.asset_symbol)}: ` +
+          `  ${arrow} ${pc.bold(alloc.target_key)}: ` +
             `${alloc.current_percentage.toFixed(1)}% (target: ${alloc.target_percentage.toFixed(1)}%)`
         );
       }
@@ -673,6 +669,11 @@ async function viewSnapshot(date: string) {
       console.log(
         pc.bold(`Total Value: ${pc.green(formatEuro(summary.totalValue))}\n`)
       );
+    }
+
+    // Show snapshot totals if available
+    if (snapshot.net_worth_eur !== undefined && snapshot.net_worth_eur !== null) {
+      console.log(pc.cyan(`Net Worth (cached): ${formatEuro(snapshot.net_worth_eur)}`));
     }
 
     DatabaseManager.closeAll();
@@ -731,7 +732,7 @@ async function deleteSingleHolding(
   date: string,
   assetSymbol: string,
   snapshot: Snapshot,
-  holdings: Holding[],
+  holdings: HoldingWithAsset[],
   ledgerRepo: LedgerRepository
 ) {
   const normalizedSymbol = assetSymbol.toUpperCase().trim();
@@ -751,11 +752,8 @@ async function deleteSingleHolding(
   console.log(pc.cyan(`  Snapshot: ${date}`));
   console.log(pc.cyan(`  Asset: ${holding.asset_symbol} (${holding.asset_name})`));
   console.log(pc.cyan(`  Amount: ${holding.amount}`));
-  if (holding.acquisition_price_eur) {
-    console.log(pc.cyan(`  Acquisition Price: ${formatEuro(holding.acquisition_price_eur)}`));
-  }
-  if (holding.acquisition_date) {
-    console.log(pc.cyan(`  Acquisition Date: ${holding.acquisition_date}`));
+  if (holding.value_eur) {
+    console.log(pc.cyan(`  Value: ${formatEuro(holding.value_eur)}`));
   }
   console.log(pc.yellow(`\nRemaining assets after deletion: ${holdings.length - 1}`));
   console.log();
@@ -788,7 +786,7 @@ async function deleteSingleHolding(
 async function deleteEntireSnapshot(
   date: string,
   snapshot: Snapshot,
-  holdings: Holding[],
+  holdings: HoldingWithAsset[],
   ledgerRepo: LedgerRepository
 ) {
   console.log(pc.yellow('\nYou are about to delete:'));
@@ -799,8 +797,8 @@ async function deleteEntireSnapshot(
   console.log(pc.bold('\n  Holdings:'));
   holdings.forEach(h => {
     console.log(pc.cyan(`    - ${h.asset_symbol} (${h.asset_name}): ${h.amount}`));
-    if (h.acquisition_price_eur && h.acquisition_date) {
-      console.log(pc.cyan(`      Acquired at ${formatEuro(h.acquisition_price_eur)} on ${h.acquisition_date}`));
+    if (h.value_eur) {
+      console.log(pc.cyan(`      Value: ${formatEuro(h.value_eur)}`));
     }
   });
   console.log(pc.red(`\nThis will delete the snapshot and all ${holdings.length} holding(s).`));

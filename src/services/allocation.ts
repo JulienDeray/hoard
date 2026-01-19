@@ -5,6 +5,7 @@ import type {
   AllocationComparison,
   RebalancingSuggestion,
   RebalancingAction,
+  AllocationTargetType,
 } from '../models/index.js';
 
 export class AllocationService {
@@ -20,7 +21,7 @@ export class AllocationService {
 
     // Get allocation targets
     const targets = this.ledgerRepo.listAllocationTargets();
-    const targetsMap = new Map(targets.map((t) => [t.asset_symbol, t.target_percentage]));
+    const targetsMap = new Map(targets.map((t) => [t.target_key, t]));
 
     // Validate targets sum to 100%
     const validation = this.ledgerRepo.validateAllocationTargets();
@@ -31,7 +32,9 @@ export class AllocationService {
 
     // Track which assets are explicitly targeted
     const explicitAssets = new Set(
-      targets.filter((t) => t.asset_symbol !== 'OTHER').map((t) => t.asset_symbol)
+      targets
+        .filter((t) => t.target_type === 'ASSET' && t.target_key !== 'OTHER')
+        .map((t) => t.target_key)
     );
 
     // Process explicitly targeted assets and non-targeted assets
@@ -41,30 +44,37 @@ export class AllocationService {
 
       if (targetsMap.has(holding.asset_symbol)) {
         // Explicitly targeted asset
-        const targetPercentage = targetsMap.get(holding.asset_symbol)!;
+        const target = targetsMap.get(holding.asset_symbol)!;
+        const targetPercentage = target.target_percentage;
         const diffPercentage = currentPercentage - targetPercentage;
         const diffValue = totalValue > 0 ? (diffPercentage / 100) * totalValue : 0;
 
         allocations.push({
-          asset_symbol: holding.asset_symbol,
-          asset_name: holding.asset_name,
+          target_type: 'ASSET' as AllocationTargetType,
+          target_key: holding.asset_symbol,
+          display_name: holding.asset_name,
           current_value: currentValue,
           current_percentage: currentPercentage,
           target_percentage: targetPercentage,
+          tolerance_pct: target.tolerance_pct ?? 2,
           difference_percentage: diffPercentage,
           difference_value: diffValue,
+          is_within_tolerance: Math.abs(diffPercentage) <= (target.tolerance_pct ?? 2),
         });
       } else if (!targetsMap.has('OTHER')) {
         // No targets set for this asset and no OTHER category
         // Show it with 0% target
         allocations.push({
-          asset_symbol: holding.asset_symbol,
-          asset_name: holding.asset_name,
+          target_type: 'ASSET' as AllocationTargetType,
+          target_key: holding.asset_symbol,
+          display_name: holding.asset_name,
           current_value: currentValue,
           current_percentage: currentPercentage,
           target_percentage: 0,
+          tolerance_pct: 2,
           difference_percentage: currentPercentage,
           difference_value: currentValue,
+          is_within_tolerance: false,
         });
       }
       // If OTHER exists but asset not explicit, skip it for now (will be grouped below)
@@ -72,39 +82,46 @@ export class AllocationService {
 
     // Handle OTHER category (wildcard)
     if (targetsMap.has('OTHER')) {
+      const otherTarget = targetsMap.get('OTHER')!;
       const otherHoldings = portfolio.holdings.filter(
         (h) => !explicitAssets.has(h.asset_symbol)
       );
       const otherValue = otherHoldings.reduce((sum, h) => sum + (h.current_value_eur || 0), 0);
       const otherPercentage = totalValue > 0 ? (otherValue / totalValue) * 100 : 0;
-      const targetPercentage = targetsMap.get('OTHER')!;
+      const targetPercentage = otherTarget.target_percentage;
 
       const diffPercentage = otherPercentage - targetPercentage;
       const diffValue = totalValue > 0 ? (diffPercentage / 100) * totalValue : 0;
 
       allocations.push({
-        asset_symbol: 'OTHER',
-        asset_name: `Other Assets (${otherHoldings.length})`,
+        target_type: 'ASSET' as AllocationTargetType,
+        target_key: 'OTHER',
+        display_name: `Other Assets (${otherHoldings.length})`,
         current_value: otherValue,
         current_percentage: otherPercentage,
         target_percentage: targetPercentage,
+        tolerance_pct: otherTarget.tolerance_pct ?? 2,
         difference_percentage: diffPercentage,
         difference_value: diffValue,
+        is_within_tolerance: Math.abs(diffPercentage) <= (otherTarget.tolerance_pct ?? 2),
       });
     }
 
     // Add assets with targets but zero holdings
     for (const target of targets) {
-      if (target.asset_symbol === 'OTHER') continue;
-      if (!portfolio.holdings.find((h) => h.asset_symbol === target.asset_symbol)) {
+      if (target.target_key === 'OTHER') continue;
+      if (!portfolio.holdings.find((h) => h.asset_symbol === target.target_key)) {
         allocations.push({
-          asset_symbol: target.asset_symbol,
-          asset_name: target.asset_symbol, // Could look up from assets table
+          target_type: target.target_type,
+          target_key: target.target_key,
+          display_name: target.target_key, // Could look up from assets table
           current_value: 0,
           current_percentage: 0,
           target_percentage: target.target_percentage,
+          tolerance_pct: target.tolerance_pct ?? 2,
           difference_percentage: -target.target_percentage,
           difference_value: -(target.target_percentage / 100) * totalValue,
+          is_within_tolerance: false,
         });
       }
     }
@@ -121,7 +138,7 @@ export class AllocationService {
 
   async getRebalancingSuggestions(
     date?: string,
-    tolerance: number = 2 // tolerance in percentage points
+    tolerance?: number
   ): Promise<RebalancingSuggestion | null> {
     const summary = await this.getAllocationSummary(date);
     if (!summary || !summary.has_targets) return null;
@@ -130,12 +147,14 @@ export class AllocationService {
     let isBalanced = true;
 
     for (const allocation of summary.allocations) {
+      // Use per-target tolerance or the passed tolerance parameter
+      const effectiveTolerance = tolerance ?? allocation.tolerance_pct;
       const absDiff = Math.abs(allocation.difference_percentage);
 
       let action: 'buy' | 'sell' | 'hold';
       let amountEur: number;
 
-      if (absDiff <= tolerance) {
+      if (absDiff <= effectiveTolerance) {
         action = 'hold';
         amountEur = 0;
       } else if (allocation.difference_percentage < 0) {
@@ -151,8 +170,9 @@ export class AllocationService {
       }
 
       actions.push({
-        asset_symbol: allocation.asset_symbol,
-        asset_name: allocation.asset_name,
+        target_type: allocation.target_type,
+        target_key: allocation.target_key,
+        display_name: allocation.display_name,
         action,
         amount_eur: amountEur,
         current_percentage: allocation.current_percentage,

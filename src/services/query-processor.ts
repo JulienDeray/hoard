@@ -64,6 +64,7 @@ export class QueryProcessor {
           asset: h.asset_symbol,
           name: h.asset_name,
           amount: h.amount,
+          value_eur: h.value_eur,
         })),
       };
     } else {
@@ -79,6 +80,7 @@ export class QueryProcessor {
           asset: h.asset_symbol,
           name: h.asset_name,
           amount: h.amount,
+          value_eur: h.value_eur,
         })),
       };
     }
@@ -135,6 +137,8 @@ export class QueryProcessor {
         date: s.date,
         notes: s.notes,
         created_at: s.created_at,
+        total_assets_eur: s.total_assets_eur,
+        net_worth_eur: s.net_worth_eur,
       })),
     };
   }
@@ -157,8 +161,8 @@ export class QueryProcessor {
       currency: suggestions.currency,
       is_balanced: suggestions.is_balanced,
       actions: suggestions.actions.map((action) => ({
-        asset: action.asset_symbol,
-        name: action.asset_name,
+        asset: action.target_key,
+        name: action.display_name,
         action: action.action,
         amount_eur: action.amount_eur,
         current_percentage: action.current_percentage,

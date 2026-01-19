@@ -102,7 +102,7 @@ async function showSummary() {
               : pc.yellow('▼');
 
         console.log(
-          `  ${arrow} ${pc.bold(alloc.asset_symbol)}: ` +
+          `  ${arrow} ${pc.bold(alloc.target_key)}: ` +
             `${alloc.current_percentage.toFixed(1)}% (target: ${alloc.target_percentage.toFixed(1)}%)`
         );
       }

@@ -46,7 +46,7 @@ async function setAllocationTargets() {
     if (existingTargets.length > 0) {
       console.log(pc.yellow('\nExisting targets:'));
       for (const target of existingTargets) {
-        console.log(pc.gray(`  ${target.asset_symbol}: ${target.target_percentage}%`));
+        console.log(pc.cyan(`  ${target.target_key}: ${target.target_percentage}%`));
       }
       console.log();
 
@@ -91,7 +91,7 @@ async function setAllocationTargets() {
       if (!symbol) break;
 
       // Validate not duplicate
-      if (targets.find((t) => t.asset_symbol === symbol)) {
+      if (targets.find((t) => t.target_key === symbol)) {
         Logger.error(`${symbol} already added`);
         continue;
       }
@@ -116,7 +116,7 @@ async function setAllocationTargets() {
       }
 
       const percentage = parseFloat(percentageInput);
-      targets.push({ asset_symbol: symbol, target_percentage: percentage });
+      targets.push({ target_key: symbol, target_percentage: percentage });
       remainingPercentage -= percentage;
 
       Logger.success(
@@ -146,7 +146,7 @@ async function setAllocationTargets() {
 
     console.log(pc.bold('\nAllocation targets saved:'));
     for (const target of targets) {
-      console.log(`  ${pc.cyan(target.asset_symbol)}: ${target.target_percentage}%`);
+      console.log(`  ${pc.cyan(target.target_key)}: ${target.target_percentage}%`);
     }
 
     DatabaseManager.closeAll();
@@ -184,9 +184,9 @@ async function viewAllocationTargets() {
     console.log(pc.bold('\nAllocation Targets:\n'));
 
     for (const target of targets) {
-      console.log(`  ${pc.bold(target.asset_symbol)}: ${pc.cyan(target.target_percentage + '%')}`);
+      console.log(`  ${pc.bold(target.target_key)}: ${pc.cyan(target.target_percentage + '%')}`);
       if (target.notes) {
-        console.log(pc.gray(`    Note: ${target.notes}`));
+        console.log(pc.cyan(`    Note: ${target.notes}`));
       }
     }
 
@@ -284,7 +284,7 @@ async function compareAllocations(options: { date?: string }) {
           : pc.green;
 
       console.log(
-        alloc.asset_symbol.padEnd(colWidth) +
+        alloc.target_key.padEnd(colWidth) +
           currentPct.padEnd(colWidth) +
           targetPct.padEnd(colWidth) +
           diffColor(diffPct.padEnd(colWidth)) +
@@ -324,7 +324,7 @@ async function clearAllocationTargets() {
 
     console.log(pc.yellow('\nCurrent targets:'));
     for (const target of targets) {
-      console.log(pc.gray(`  ${target.asset_symbol}: ${target.target_percentage}%`));
+      console.log(pc.cyan(`  ${target.target_key}: ${target.target_percentage}%`));
     }
     console.log();
 

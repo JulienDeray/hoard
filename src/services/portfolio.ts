@@ -1,4 +1,4 @@
-import type { Holding, HoldingWithValue } from '../models/index.js';
+import type { HoldingWithAsset, HoldingWithValue } from '../models/index.js';
 import type { LedgerRepository } from '../database/ledger.js';
 import type { RatesRepository } from '../database/rates.js';
 import type { CoinMarketCapService } from './coinmarketcap.js';
@@ -53,7 +53,7 @@ export class PortfolioService {
   }
 
   async enrichHoldingsWithPrices(
-    holdings: Holding[],
+    holdings: HoldingWithAsset[],
     date: string | null
   ): Promise<HoldingWithValue[]> {
     const enriched: HoldingWithValue[] = [];
@@ -61,7 +61,10 @@ export class PortfolioService {
     for (const holding of holdings) {
       let price: number | undefined;
 
-      if (date) {
+      // If holding already has value_eur from the database, use it
+      if (holding.value_eur !== undefined && holding.value_eur !== null) {
+        price = holding.value_eur / holding.amount;
+      } else if (date) {
         // Get historical price
         const historicalRate = this.ratesRepo.getHistoricalRate(
           holding.asset_symbol,
@@ -91,7 +94,7 @@ export class PortfolioService {
       enriched.push({
         ...holding,
         current_price_eur: price,
-        current_value_eur: price ? holding.amount * price : undefined,
+        current_value_eur: price ? holding.amount * price : holding.value_eur,
       });
     }
 
