@@ -49,12 +49,10 @@ export interface AssetInfo {
 
 export class CoinMarketCapService {
   private client: AxiosInstance;
-  private apiKey: string;
   private requestQueue: Promise<any> = Promise.resolve();
   private requestDelay = 1000; // 1 second between requests (conservative for free tier)
 
   constructor(apiKey: string) {
-    this.apiKey = apiKey;
     this.client = axios.create({
       baseURL: 'https://pro-api.coinmarketcap.com',
       headers: {

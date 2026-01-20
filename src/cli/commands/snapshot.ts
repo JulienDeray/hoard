@@ -554,6 +554,7 @@ async function addSnapshot() {
           if (num <= 0) {
             return 'Amount must be positive';
           }
+          return undefined;
         },
       });
 

@@ -64,7 +64,7 @@ program.hook('preAction', (thisCommand) => {
         Logger.error('API keys not configured. Please set them in .env or run: npm run init');
         process.exit(1);
       }
-    } catch (error) {
+    } catch {
       Logger.error('Configuration error. Please run: npm run init');
       process.exit(1);
     }
