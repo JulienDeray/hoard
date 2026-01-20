@@ -151,8 +151,8 @@ describe('LedgerRepository', () => {
 
         // Assert
         expect(results).toHaveLength(2);
-        expect(results[0]).toEqual(feb); // Most recent first
-        expect(results[1]).toEqual(jan);
+        expect(results[0].id).toBe(feb.id);
+        expect(results[1].id).toBe(jan.id);
       });
 
       it('should return empty array when no snapshots', () => {
@@ -184,6 +184,8 @@ describe('LedgerRepository', () => {
 
   describe('Holding Operations', () => {
     let snapshotId: number;
+    let btcAssetId: number;
+    let ethAssetId: number;
 
     beforeEach(() => {
       const snapshot = repository.createSnapshot({
@@ -192,9 +194,24 @@ describe('LedgerRepository', () => {
       });
       snapshotId = snapshot.id;
 
-      // Create test assets
-      repository.createAsset({ symbol: 'BTC', name: 'Bitcoin', cmc_id: 1 });
-      repository.createAsset({ symbol: 'ETH', name: 'Ethereum', cmc_id: 1027 });
+      // Create test assets using v3 schema
+      const btcAsset = repository.createAsset({
+        symbol: 'BTC',
+        name: 'Bitcoin',
+        asset_class: 'CRYPTO',
+        valuation_source: 'CMC',
+        external_id: '1',
+      });
+      btcAssetId = btcAsset.id;
+
+      const ethAsset = repository.createAsset({
+        symbol: 'ETH',
+        name: 'Ethereum',
+        asset_class: 'CRYPTO',
+        valuation_source: 'CMC',
+        external_id: '1027',
+      });
+      ethAssetId = ethAsset.id;
     });
 
     describe('createHolding', () => {
@@ -202,8 +219,7 @@ describe('LedgerRepository', () => {
         // Arrange
         const input = {
           snapshot_id: snapshotId,
-          asset_symbol: 'BTC',
-          asset_name: 'Bitcoin',
+          asset_id: btcAssetId,
           amount: 0.5,
         };
 
@@ -214,7 +230,7 @@ describe('LedgerRepository', () => {
         expect(result).toBeDefined();
         expect(result.id).toBeTypeOf('number');
         expect(result.snapshot_id).toBe(snapshotId);
-        expect(result.asset_symbol).toBe('BTC');
+        expect(result.asset_id).toBe(btcAssetId);
         expect(result.amount).toBe(0.5);
       });
 
@@ -222,11 +238,9 @@ describe('LedgerRepository', () => {
         // Arrange
         const input = {
           snapshot_id: snapshotId,
-          asset_symbol: 'ETH',
-          asset_name: 'Ethereum',
+          asset_id: ethAssetId,
           amount: 10,
-          acquisition_date: '2024-01-01',
-          acquisition_price_eur: 2500,
+          value_eur: 25000,
           notes: 'Bought at discount',
         };
 
@@ -234,8 +248,7 @@ describe('LedgerRepository', () => {
         const result = repository.createHolding(input);
 
         // Assert
-        expect(result.acquisition_date).toBe(input.acquisition_date);
-        expect(result.acquisition_price_eur).toBe(input.acquisition_price_eur);
+        expect(result.value_eur).toBe(input.value_eur);
         expect(result.notes).toBe(input.notes);
       });
     });
@@ -245,8 +258,7 @@ describe('LedgerRepository', () => {
         // Arrange
         const created = repository.createHolding({
           snapshot_id: snapshotId,
-          asset_symbol: 'BTC',
-          asset_name: 'Bitcoin',
+          asset_id: btcAssetId,
           amount: 0.5,
         });
 
@@ -271,14 +283,12 @@ describe('LedgerRepository', () => {
         // Arrange
         repository.createHolding({
           snapshot_id: snapshotId,
-          asset_symbol: 'BTC',
-          asset_name: 'Bitcoin',
+          asset_id: btcAssetId,
           amount: 0.5,
         });
         repository.createHolding({
           snapshot_id: snapshotId,
-          asset_symbol: 'ETH',
-          asset_name: 'Ethereum',
+          asset_id: ethAssetId,
           amount: 10,
         });
 
@@ -303,8 +313,7 @@ describe('LedgerRepository', () => {
         // Arrange
         repository.createHolding({
           snapshot_id: snapshotId,
-          asset_symbol: 'BTC',
-          asset_name: 'Bitcoin',
+          asset_id: btcAssetId,
           amount: 0.5,
         });
 
@@ -322,8 +331,7 @@ describe('LedgerRepository', () => {
         // Arrange - Create earlier snapshot with holdings
         repository.createHolding({
           snapshot_id: snapshotId,
-          asset_symbol: 'BTC',
-          asset_name: 'Bitcoin',
+          asset_id: btcAssetId,
           amount: 0.5,
         });
 
@@ -334,8 +342,7 @@ describe('LedgerRepository', () => {
         });
         repository.createHolding({
           snapshot_id: newSnapshot.id,
-          asset_symbol: 'ETH',
-          asset_name: 'Ethereum',
+          asset_id: ethAssetId,
           amount: 10,
         });
 
@@ -364,8 +371,7 @@ describe('LedgerRepository', () => {
         // Arrange
         const created = repository.createHolding({
           snapshot_id: snapshotId,
-          asset_symbol: 'BTC',
-          asset_name: 'Bitcoin',
+          asset_id: btcAssetId,
           amount: 0.5,
         });
 
@@ -387,8 +393,7 @@ describe('LedgerRepository', () => {
         // Arrange
         const created = repository.createHolding({
           snapshot_id: snapshotId,
-          asset_symbol: 'BTC',
-          asset_name: 'Bitcoin',
+          asset_id: btcAssetId,
           amount: 0.5,
         });
 
@@ -409,7 +414,9 @@ describe('LedgerRepository', () => {
         const input = {
           symbol: 'BTC',
           name: 'Bitcoin',
-          cmc_id: 1,
+          asset_class: 'CRYPTO' as const,
+          valuation_source: 'CMC' as const,
+          external_id: '1',
         };
 
         // Act
@@ -417,15 +424,20 @@ describe('LedgerRepository', () => {
 
         // Assert
         expect(result).toBeDefined();
+        expect(result.id).toBeTypeOf('number');
         expect(result.symbol).toBe('BTC');
         expect(result.name).toBe('Bitcoin');
-        expect(result.cmc_id).toBe(1);
+        expect(result.asset_class).toBe('CRYPTO');
+        expect(result.external_id).toBe('1');
         expect(result.is_active).toBe(true);
       });
 
       it('should throw on duplicate symbol constraint violation', () => {
         // Arrange
-        const input = { symbol: 'BTC', name: 'Bitcoin', cmc_id: 1 };
+        const input = {
+          symbol: 'BTC',
+          name: 'Bitcoin',
+        };
         repository.createAsset(input);
 
         // Act & Assert
@@ -433,17 +445,17 @@ describe('LedgerRepository', () => {
       });
     });
 
-    describe('getAsset', () => {
+    describe('getAssetBySymbol', () => {
       it('should retrieve existing asset', () => {
         // Arrange
         const created = repository.createAsset({
           symbol: 'BTC',
           name: 'Bitcoin',
-          cmc_id: 1,
+          external_id: '1',
         });
 
         // Act
-        const result = repository.getAsset('BTC');
+        const result = repository.getAssetBySymbol('BTC');
 
         // Assert
         expect(result?.symbol).toBe(created.symbol);
@@ -452,7 +464,7 @@ describe('LedgerRepository', () => {
 
       it('should return undefined for non-existent asset', () => {
         // Act
-        const result = repository.getAsset('NONEXISTENT');
+        const result = repository.getAssetBySymbol('NONEXISTENT');
 
         // Assert
         expect(result).toBeUndefined();
@@ -462,8 +474,8 @@ describe('LedgerRepository', () => {
     describe('listAssets', () => {
       it('should return all assets', () => {
         // Arrange
-        repository.createAsset({ symbol: 'BTC', name: 'Bitcoin', cmc_id: 1 });
-        repository.createAsset({ symbol: 'ETH', name: 'Ethereum', cmc_id: 1027 });
+        repository.createAsset({ symbol: 'BTC', name: 'Bitcoin', external_id: '1' });
+        repository.createAsset({ symbol: 'ETH', name: 'Ethereum', external_id: '1027' });
 
         // Act
         const results = repository.listAssets();
