@@ -206,6 +206,45 @@ The free tier of CoinMarketCap API provides ~333 calls per day. The application:
 - Verify you haven't exceeded rate limits
 - Ensure the crypto symbol is correct (e.g., BTC, ETH)
 
+## Web UI
+
+The project includes a React-based web UI in the `web/` directory for visualizing portfolio data.
+
+### Running the Web UI
+
+```bash
+# Install dependencies (first time only)
+cd web && npm install
+
+# Start development server
+cd web && npm run dev
+```
+
+Or use the convenience scripts from the root:
+
+```bash
+npm run web:dev    # Start dev server
+npm run web:build  # Build for production
+```
+
+The web UI will be available at http://localhost:5173
+
+### Features
+
+- **Dashboard** - Overview with quick stats and navigation
+- **Snapshots** - List and view portfolio snapshots over time
+- **Portfolio** - Current holdings breakdown with allocation weights
+- **Allocations** - Compare current vs target allocations with rebalancing suggestions
+
+### Tech Stack
+
+- **Build**: Vite + TypeScript
+- **UI**: React 19 + React Router 7
+- **Components**: shadcn/ui + Tailwind CSS v4
+- **State**: TanStack Query
+
+Note: The web UI currently uses mock data. Connect it to a real API backend when available.
+
 ## License
 
 MIT
