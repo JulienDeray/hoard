@@ -76,7 +76,7 @@ async function showSummary() {
         `    ${holding.amount} ${holding.asset_symbol}` +
           pc.bold(' = ') +
           pc.green(valueStr) +
-          pc.gray(` (@ ${priceStr})`) +
+          pc.cyan(` (@ ${priceStr})`) +
           ` - ${percentage}%`
       );
       console.log();

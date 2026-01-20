@@ -7,10 +7,17 @@ import { RatesRepository } from '../../database/rates.js';
 import { CoinMarketCapService } from '../../services/coinmarketcap.js';
 import { PortfolioService } from '../../services/portfolio.js';
 import { AllocationService } from '../../services/allocation.js';
+import { AllocationTargetService } from '../../services/allocation-target.js';
 import { configManager } from '../../utils/config.js';
 import { Logger } from '../../utils/logger.js';
 import { formatEuro } from '../../utils/formatters.js';
 import { getCurrentEnvironment } from '../index.js';
+import {
+  ServiceError,
+  NoAllocationTargetsError,
+  DuplicateAllocationTargetError,
+  AllocationTargetsSumError,
+} from '../../errors/index.js';
 import type { CreateAllocationTargetInput } from '../../models/index.js';
 
 export const allocationCommand = new Command('allocation')
@@ -31,19 +38,94 @@ export const allocationCommand = new Command('allocation')
     new Command('clear').description('Clear all allocation targets').action(clearAllocationTargets)
   );
 
+// ============================================================================
+// Helper: Initialize services
+// ============================================================================
+
+function initializeServices() {
+  const env = getCurrentEnvironment();
+  const config = configManager.getWithEnvironment(env);
+  const ledgerDb = DatabaseManager.getLedgerDb(config.database.ledgerPath);
+  const ledgerRepo = new LedgerRepository(ledgerDb);
+  const allocationTargetService = new AllocationTargetService(ledgerRepo);
+
+  return { config, ledgerRepo, allocationTargetService };
+}
+
+function initializeFullServices() {
+  const env = getCurrentEnvironment();
+  const config = configManager.getWithEnvironment(env);
+  const ledgerDb = DatabaseManager.getLedgerDb(config.database.ledgerPath);
+  const ratesDb = DatabaseManager.getRatesDb(config.database.ratesPath);
+  const ledgerRepo = new LedgerRepository(ledgerDb);
+  const ratesRepo = new RatesRepository(ratesDb, config.cache.rateCacheTTL);
+  const cmcService = new CoinMarketCapService(config.api.coinmarketcap.apiKey);
+  const portfolioService = new PortfolioService(
+    ledgerRepo,
+    ratesRepo,
+    cmcService,
+    config.defaults.baseCurrency
+  );
+  const allocationService = new AllocationService(ledgerRepo, portfolioService);
+  const allocationTargetService = new AllocationTargetService(ledgerRepo);
+
+  return { config, ledgerRepo, allocationService, allocationTargetService };
+}
+
+// ============================================================================
+// Helper: Handle service errors
+// ============================================================================
+
+function handleAllocationError(error: unknown): never {
+  if (error instanceof NoAllocationTargetsError) {
+    Logger.info('No allocation targets to clear');
+    DatabaseManager.closeAll();
+    clack.outro('No targets found');
+    process.exit(0);
+  }
+
+  if (error instanceof DuplicateAllocationTargetError) {
+    Logger.error(`${error.targetKey} already added`);
+    DatabaseManager.closeAll();
+    clack.outro('Duplicate target');
+    process.exit(1);
+  }
+
+  if (error instanceof AllocationTargetsSumError) {
+    Logger.error(`Targets sum to ${error.sum.toFixed(2)}%, must equal 100%`);
+    DatabaseManager.closeAll();
+    clack.outro('Invalid allocation sum');
+    process.exit(1);
+  }
+
+  if (error instanceof ServiceError) {
+    Logger.error(error.message);
+    DatabaseManager.closeAll();
+    clack.outro('Operation failed');
+    process.exit(1);
+  }
+
+  // Unknown error
+  Logger.error(error instanceof Error ? error.message : String(error));
+  DatabaseManager.closeAll();
+  process.exit(1);
+}
+
+// ============================================================================
+// CLI Commands
+// ============================================================================
+
 async function setAllocationTargets() {
   clack.intro('Set Allocation Targets');
 
   try {
-    const env = getCurrentEnvironment();
-    const config = configManager.getWithEnvironment(env);
-    const ledgerDb = DatabaseManager.getLedgerDb(config.database.ledgerPath);
-    const ledgerRepo = new LedgerRepository(ledgerDb);
+    const { ledgerRepo, allocationTargetService } = initializeServices();
 
-    // Get existing targets
-    const existingTargets = ledgerRepo.listAllocationTargets();
+    // Check for existing targets
+    const existingTargets = allocationTargetService.getExistingTargetsForDisplay();
 
-    if (existingTargets.length > 0) {
+    if (existingTargets) {
+      // Display existing targets
       console.log(pc.yellow('\nExisting targets:'));
       for (const target of existingTargets) {
         console.log(pc.cyan(`  ${target.target_key}: ${target.target_percentage}%`));
@@ -62,13 +144,14 @@ async function setAllocationTargets() {
       }
     }
 
-    // Get available assets
+    // Show available assets
     const assets = ledgerRepo.listAssets();
     console.log(pc.bold('\nAvailable assets:'));
-    console.log(pc.gray('  ' + assets.map((a) => a.symbol).join(', ')));
-    console.log(pc.gray('  OTHER (wildcard for unlisted assets)'));
+    console.log(pc.cyan('  ' + assets.map((a) => a.symbol).join(', ')));
+    console.log(pc.cyan('  OTHER (wildcard for unlisted assets)'));
     console.log();
 
+    // Collect targets interactively
     const targets: CreateAllocationTargetInput[] = [];
     let remainingPercentage = 100;
 
@@ -90,7 +173,7 @@ async function setAllocationTargets() {
       const symbol = symbolInput.toUpperCase().trim();
       if (!symbol) break;
 
-      // Validate not duplicate
+      // Check for duplicate
       if (targets.find((t) => t.target_key === symbol)) {
         Logger.error(`${symbol} already added`);
         continue;
@@ -106,6 +189,7 @@ async function setAllocationTargets() {
           if (num > remainingPercentage + 0.01) {
             return `Cannot exceed remaining ${remainingPercentage.toFixed(1)}%`;
           }
+          return undefined;
         },
       });
 
@@ -117,15 +201,24 @@ async function setAllocationTargets() {
 
       const percentage = parseFloat(percentageInput);
       targets.push({ target_key: symbol, target_percentage: percentage });
-      remainingPercentage -= percentage;
+      remainingPercentage = allocationTargetService.calculateRemainingPercentage(targets);
 
       Logger.success(
         `Added ${symbol}: ${percentage}% (${remainingPercentage.toFixed(1)}% remaining)`
       );
     }
 
-    // Validate sum
+    if (targets.length === 0) {
+      Logger.warn('No targets entered');
+      DatabaseManager.closeAll();
+      clack.outro('Operation cancelled');
+      return;
+    }
+
+    // Validate sum before saving
     const sum = targets.reduce((acc, t) => acc + t.target_percentage, 0);
+    let allowInvalidSum = false;
+
     if (Math.abs(sum - 100) > 0.01) {
       Logger.error(`Targets sum to ${sum.toFixed(2)}%, must equal 100%`);
 
@@ -139,25 +232,23 @@ async function setAllocationTargets() {
         clack.outro('Operation cancelled');
         return;
       }
+
+      allowInvalidSum = true;
     }
 
-    // Save targets
-    ledgerRepo.setAllocationTargets(targets);
+    // Save targets using service
+    const result = allocationTargetService.setTargets({ targets, allowInvalidSum });
 
+    // Display saved targets
     console.log(pc.bold('\nAllocation targets saved:'));
-    for (const target of targets) {
+    for (const target of result.targets) {
       console.log(`  ${pc.cyan(target.target_key)}: ${target.target_percentage}%`);
     }
 
     DatabaseManager.closeAll();
     clack.outro('Allocation targets set successfully!');
   } catch (error) {
-    Logger.error(
-      `Failed to set targets: ${error instanceof Error ? error.message : String(error)}`
-    );
-    DatabaseManager.closeAll();
-    clack.outro('Failed to set allocation targets');
-    process.exit(1);
+    handleAllocationError(error);
   }
 }
 
@@ -165,12 +256,9 @@ async function viewAllocationTargets() {
   clack.intro('Allocation Targets');
 
   try {
-    const env = getCurrentEnvironment();
-    const config = configManager.getWithEnvironment(env);
-    const ledgerDb = DatabaseManager.getLedgerDb(config.database.ledgerPath);
-    const ledgerRepo = new LedgerRepository(ledgerDb);
+    const { allocationTargetService } = initializeServices();
 
-    const targets = ledgerRepo.listAllocationTargets();
+    const targets = allocationTargetService.listTargets();
 
     if (targets.length === 0) {
       Logger.info('No allocation targets set');
@@ -179,8 +267,9 @@ async function viewAllocationTargets() {
       return;
     }
 
-    const validation = ledgerRepo.validateAllocationTargets();
+    const validation = allocationTargetService.validateTargets();
 
+    // Display targets
     console.log(pc.bold('\nAllocation Targets:\n'));
 
     for (const target of targets) {
@@ -200,11 +289,7 @@ async function viewAllocationTargets() {
     DatabaseManager.closeAll();
     clack.outro(`${targets.length} target(s) defined`);
   } catch (error) {
-    Logger.error(
-      `Failed to view targets: ${error instanceof Error ? error.message : String(error)}`
-    );
-    DatabaseManager.closeAll();
-    process.exit(1);
+    handleAllocationError(error);
   }
 }
 
@@ -215,20 +300,16 @@ async function compareAllocations(options: { date?: string }) {
   spinner.start('Loading portfolio and targets...');
 
   try {
-    const env = getCurrentEnvironment();
-    const config = configManager.getWithEnvironment(env);
-    const ledgerDb = DatabaseManager.getLedgerDb(config.database.ledgerPath);
-    const ratesDb = DatabaseManager.getRatesDb(config.database.ratesPath);
-    const ledgerRepo = new LedgerRepository(ledgerDb);
-    const ratesRepo = new RatesRepository(ratesDb, config.cache.rateCacheTTL);
-    const cmcService = new CoinMarketCapService(config.api.coinmarketcap.apiKey);
-    const portfolioService = new PortfolioService(
-      ledgerRepo,
-      ratesRepo,
-      cmcService,
-      config.defaults.baseCurrency
-    );
-    const allocationService = new AllocationService(ledgerRepo, portfolioService);
+    const { allocationService, allocationTargetService } = initializeFullServices();
+
+    // Check if targets exist first
+    if (!allocationTargetService.hasTargets()) {
+      spinner.stop('No allocation targets set');
+      Logger.info('Set targets with: allocation set');
+      DatabaseManager.closeAll();
+      clack.outro('No targets to compare');
+      return;
+    }
 
     const summary = await allocationService.getAllocationSummary(options.date);
 
@@ -239,16 +320,9 @@ async function compareAllocations(options: { date?: string }) {
       return;
     }
 
-    if (!summary.has_targets) {
-      spinner.stop('No allocation targets set');
-      Logger.info('Set targets with: allocation set');
-      DatabaseManager.closeAll();
-      clack.outro('No targets to compare');
-      return;
-    }
-
     spinner.stop('Data loaded');
 
+    // Display comparison
     console.log(pc.bold(`\nAllocation Comparison (${summary.date})`));
     console.log(pc.bold(`Total Value: ${pc.green(formatEuro(summary.total_value))}\n`));
 
@@ -298,9 +372,7 @@ async function compareAllocations(options: { date?: string }) {
     clack.outro('Allocation comparison complete');
   } catch (error) {
     spinner.stop('Failed to compare allocations');
-    Logger.error(error instanceof Error ? error.message : String(error));
-    DatabaseManager.closeAll();
-    process.exit(1);
+    handleAllocationError(error);
   }
 }
 
@@ -308,26 +380,26 @@ async function clearAllocationTargets() {
   clack.intro('Clear Allocation Targets');
 
   try {
-    const env = getCurrentEnvironment();
-    const config = configManager.getWithEnvironment(env);
-    const ledgerDb = DatabaseManager.getLedgerDb(config.database.ledgerPath);
-    const ledgerRepo = new LedgerRepository(ledgerDb);
+    const { allocationTargetService } = initializeServices();
 
-    const targets = ledgerRepo.listAllocationTargets();
+    // Get existing targets for display
+    const existingTargets = allocationTargetService.getExistingTargetsForDisplay();
 
-    if (targets.length === 0) {
+    if (!existingTargets) {
       Logger.info('No allocation targets to clear');
       DatabaseManager.closeAll();
       clack.outro('No targets found');
       return;
     }
 
+    // Display current targets
     console.log(pc.yellow('\nCurrent targets:'));
-    for (const target of targets) {
+    for (const target of existingTargets) {
       console.log(pc.cyan(`  ${target.target_key}: ${target.target_percentage}%`));
     }
     console.log();
 
+    // Confirm deletion
     const confirm = await clack.confirm({
       message: 'Are you sure you want to clear all targets?',
       initialValue: false,
@@ -339,16 +411,13 @@ async function clearAllocationTargets() {
       process.exit(0);
     }
 
-    ledgerRepo.setAllocationTargets([]);
+    // Clear targets using service
+    const clearedCount = allocationTargetService.clearTargets();
 
-    Logger.success('All allocation targets cleared');
+    Logger.success(`All ${clearedCount} allocation target(s) cleared`);
     DatabaseManager.closeAll();
     clack.outro('Targets cleared successfully');
   } catch (error) {
-    Logger.error(
-      `Failed to clear targets: ${error instanceof Error ? error.message : String(error)}`
-    );
-    DatabaseManager.closeAll();
-    process.exit(1);
+    handleAllocationError(error);
   }
 }

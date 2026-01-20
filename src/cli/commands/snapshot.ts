@@ -8,12 +8,20 @@ import { RatesRepository } from '../../database/rates.js';
 import { CoinMarketCapService } from '../../services/coinmarketcap.js';
 import { PortfolioService } from '../../services/portfolio.js';
 import { AllocationService } from '../../services/allocation.js';
+import { SnapshotService } from '../../services/snapshot.js';
 import { configManager } from '../../utils/config.js';
 import { Logger } from '../../utils/logger.js';
 import { validateDate } from '../../utils/validators.js';
 import { formatEuro } from '../../utils/formatters.js';
 import { getCurrentEnvironment } from '../index.js';
-import type { Snapshot, HoldingWithAsset, Asset } from '../../models/index.js';
+import {
+  ServiceError,
+  SnapshotNotFoundError,
+  SnapshotAlreadyExistsError,
+  HoldingNotFoundError,
+  InvalidDateError,
+} from '../../errors/index.js';
+import type { Asset, HoldingWithAsset } from '../../models/index.js';
 
 export const snapshotCommand = new Command('snapshot')
   .description('Manage portfolio snapshots')
@@ -43,14 +51,259 @@ export const snapshotCommand = new Command('snapshot')
       .action(deleteSnapshot)
   );
 
+// ============================================================================
+// Helper: Initialize services
+// ============================================================================
+
+function initializeServices() {
+  const env = getCurrentEnvironment();
+  const config = configManager.getWithEnvironment(env);
+  const ledgerDb = DatabaseManager.getLedgerDb(config.database.ledgerPath);
+  const ratesDb = DatabaseManager.getRatesDb(config.database.ratesPath);
+  const ledgerRepo = new LedgerRepository(ledgerDb);
+  const ratesRepo = new RatesRepository(ratesDb, config.cache.rateCacheTTL);
+  const cmcService = new CoinMarketCapService(config.api.coinmarketcap.apiKey);
+
+  const snapshotService = new SnapshotService(
+    ledgerRepo,
+    ratesRepo,
+    cmcService,
+    config.defaults.baseCurrency
+  );
+
+  const portfolioService = new PortfolioService(
+    ledgerRepo,
+    ratesRepo,
+    cmcService,
+    config.defaults.baseCurrency
+  );
+
+  const allocationService = new AllocationService(ledgerRepo, portfolioService);
+
+  return {
+    config,
+    ledgerRepo,
+    ratesRepo,
+    cmcService,
+    snapshotService,
+    portfolioService,
+    allocationService,
+  };
+}
+
+// ============================================================================
+// Helper: Handle service errors
+// ============================================================================
+
+function handleSnapshotError(error: unknown): never {
+  if (error instanceof SnapshotNotFoundError) {
+    Logger.error(`No snapshot found for ${error.date}`);
+    DatabaseManager.closeAll();
+    clack.outro('Snapshot not found');
+    process.exit(1);
+  }
+
+  if (error instanceof SnapshotAlreadyExistsError) {
+    Logger.error(`Snapshot already exists for ${error.date}`);
+    DatabaseManager.closeAll();
+    clack.outro('Snapshot already exists');
+    process.exit(1);
+  }
+
+  if (error instanceof HoldingNotFoundError) {
+    Logger.error(`Asset ${error.symbol} not found in snapshot ${error.snapshotDate}`);
+    DatabaseManager.closeAll();
+    clack.outro('Asset not found');
+    process.exit(1);
+  }
+
+  if (error instanceof InvalidDateError) {
+    Logger.error('Invalid date format. Use YYYY-MM-DD');
+    DatabaseManager.closeAll();
+    clack.outro('Invalid date format');
+    process.exit(1);
+  }
+
+  if (error instanceof ServiceError) {
+    Logger.error(error.message);
+    DatabaseManager.closeAll();
+    clack.outro('Operation failed');
+    process.exit(1);
+  }
+
+  // Unknown error
+  Logger.error(error instanceof Error ? error.message : String(error));
+  DatabaseManager.closeAll();
+  process.exit(1);
+}
+
+// ============================================================================
+// CLI Commands
+// ============================================================================
+
+async function listSnapshots(options: { assets?: string; last?: number }) {
+  clack.intro('Portfolio Snapshots');
+
+  try {
+    const { snapshotService } = initializeServices();
+
+    const result = snapshotService.listSnapshots({
+      assets: options.assets,
+      last: options.last,
+    });
+
+    if (result.snapshots.length === 0) {
+      Logger.info('No snapshots found');
+      DatabaseManager.closeAll();
+      clack.outro('No snapshots to display');
+      return;
+    }
+
+    // Check if asset filter produced no matches
+    if (options.assets && result.filteredAssetSymbols.length === 0) {
+      Logger.error('None of the requested assets were found in the snapshots');
+      DatabaseManager.closeAll();
+      clack.outro('No matching assets found');
+      return;
+    }
+
+    // Display snapshots
+    console.log(pc.bold(`\nPortfolio Snapshots:\n`));
+
+    // Show filter info if filters are applied
+    if (options.assets || options.last) {
+      const filters: string[] = [];
+      if (options.assets) filters.push(`assets: ${result.filteredAssetSymbols.join(', ')}`);
+      if (options.last) filters.push(`last ${options.last} snapshot(s)`);
+      console.log(pc.cyan(`Filters: ${filters.join(', ')}\n`));
+    }
+
+    // Header row
+    const dateColWidth = 12;
+    const assetColWidth = 15;
+    let header = 'Date'.padEnd(dateColWidth);
+    result.filteredAssetSymbols.forEach((symbol) => {
+      header += symbol.padEnd(assetColWidth);
+    });
+    console.log(pc.bold(header));
+    console.log('─'.repeat(dateColWidth + result.filteredAssetSymbols.length * assetColWidth));
+
+    // Data rows
+    for (const { snapshot, holdingsMap } of result.snapshots) {
+      let row = snapshot.date.padEnd(dateColWidth);
+      result.filteredAssetSymbols.forEach((symbol) => {
+        const amount = holdingsMap.get(symbol);
+        const value = amount !== undefined ? amount.toString() : '─';
+        row += value.padEnd(assetColWidth);
+      });
+      console.log(row);
+    }
+
+    console.log();
+
+    DatabaseManager.closeAll();
+    const filterInfo = result.snapshots.length < result.totalCount
+      ? ` (${result.snapshots.length} of ${result.totalCount} total)`
+      : '';
+    clack.outro(`Found ${result.snapshots.length} snapshot(s)${filterInfo}`);
+  } catch (error) {
+    handleSnapshotError(error);
+  }
+}
+
+async function viewSnapshot(date: string) {
+  clack.intro(`View Snapshot: ${date}`);
+
+  try {
+    const { snapshotService, portfolioService, allocationService } = initializeServices();
+
+    // Get snapshot with holdings using service
+    const { snapshot } = snapshotService.getSnapshotByDate(date);
+
+    console.log(pc.bold(`\nSnapshot: ${snapshot.date}\n`));
+    if (snapshot.notes) {
+      console.log(pc.cyan(`Notes: ${snapshot.notes}\n`));
+    }
+
+    // Get enriched portfolio data
+    const summary = await portfolioService.getPortfolioValue(date);
+
+    if (!summary || summary.holdings.length === 0) {
+      Logger.info('No holdings in this snapshot');
+      DatabaseManager.closeAll();
+      clack.outro('No holdings to display');
+      return;
+    }
+
+    // Display holdings
+    console.log(pc.bold('Holdings:'));
+    for (const holding of summary.holdings) {
+      const priceStr = holding.current_price_eur
+        ? formatEuro(holding.current_price_eur)
+        : 'N/A';
+      const valueStr = holding.current_value_eur
+        ? formatEuro(holding.current_value_eur)
+        : 'N/A';
+
+      console.log(`  ${pc.bold(holding.asset_symbol)} (${holding.asset_name})`);
+      console.log(
+        `    ${holding.amount} ${holding.asset_symbol}` +
+          pc.bold(' = ') +
+          pc.green(valueStr) +
+          pc.cyan(` (@ ${priceStr})`)
+      );
+      console.log();
+    }
+
+    // Show allocation comparison if targets exist
+    const allocationSummary = await allocationService.getAllocationSummary(date);
+
+    if (allocationSummary && allocationSummary.has_targets) {
+      console.log(pc.bold('Allocation vs Targets:'));
+
+      if (!allocationSummary.targets_sum_valid) {
+        console.log(pc.yellow('  ⚠ Warning: Targets do not sum to 100%'));
+      }
+
+      for (const alloc of allocationSummary.allocations) {
+        const arrow = alloc.is_within_tolerance
+          ? pc.green('✓')
+          : alloc.difference_percentage > 0
+            ? pc.red('▲')
+            : pc.yellow('▼');
+
+        console.log(
+          `  ${arrow} ${pc.bold(alloc.target_key)}: ` +
+            `${alloc.current_percentage.toFixed(1)}% (target: ${alloc.target_percentage.toFixed(1)}%)`
+        );
+      }
+      console.log();
+    }
+
+    // Total value
+    if (summary.totalValue) {
+      console.log(
+        pc.bold(`Total Value: ${pc.green(formatEuro(summary.totalValue))}\n`)
+      );
+    }
+
+    // Show snapshot totals if available
+    if (snapshot.net_worth_eur !== undefined && snapshot.net_worth_eur !== null) {
+      console.log(pc.cyan(`Net Worth (cached): ${formatEuro(snapshot.net_worth_eur)}`));
+    }
+
+    DatabaseManager.closeAll();
+    clack.outro(`Snapshot loaded: ${summary.holdings.length} holding(s)`);
+  } catch (error) {
+    handleSnapshotError(error);
+  }
+}
+
 async function addSnapshot() {
   clack.intro('Add Portfolio Snapshot');
 
   try {
-    const env = getCurrentEnvironment();
-    const config = configManager.getWithEnvironment(env);
-    const ledgerDb = DatabaseManager.getLedgerDb(config.database.ledgerPath);
-    const ledgerRepo = new LedgerRepository(ledgerDb);
+    const { snapshotService, portfolioService } = initializeServices();
 
     // Prompt for snapshot date
     const date = await clack.text({
@@ -61,6 +314,7 @@ async function addSnapshot() {
         if (!validateDate(input)) {
           return 'Please enter a valid date in YYYY-MM-DD format';
         }
+        return undefined;
       },
     });
 
@@ -71,13 +325,13 @@ async function addSnapshot() {
     }
 
     // Check if snapshot already exists
-    let snapshot = ledgerRepo.getSnapshotByDate(date);
+    const existsResult = snapshotService.checkSnapshotExists(date);
 
-    if (snapshot) {
+    let snapshot;
+    if (existsResult.exists && existsResult.snapshot) {
       // Snapshot exists, ask if user wants to add to it
-      const existingHoldings = ledgerRepo.getHoldingsBySnapshotId(snapshot.id);
       console.log(pc.yellow(`\nSnapshot already exists for ${date}`));
-      console.log(pc.cyan(`Current holdings: ${existingHoldings.length} asset(s)`));
+      console.log(pc.cyan(`Current holdings: ${existsResult.holdings.length} asset(s)`));
 
       const addToExisting = await clack.confirm({
         message: 'Add more holdings to this snapshot?',
@@ -90,6 +344,7 @@ async function addSnapshot() {
         process.exit(0);
       }
 
+      snapshot = existsResult.snapshot;
       Logger.info(`Adding holdings to existing snapshot for ${date}`);
     } else {
       // Create new snapshot
@@ -104,15 +359,16 @@ async function addSnapshot() {
         process.exit(0);
       }
 
-      snapshot = ledgerRepo.createSnapshot({ date, notes: notes || undefined });
+      const result = snapshotService.getOrCreateSnapshot(date, notes || undefined);
+      snapshot = result.snapshot;
       Logger.success(`Snapshot created for ${date}`);
     }
 
     console.log(pc.bold('\nAdding holdings to snapshot...\n'));
 
     // Get available assets and existing holdings
-    const assets = ledgerRepo.listAssets();
-    const existingHoldings = ledgerRepo.getHoldingsBySnapshotId(snapshot.id);
+    const assets = snapshotService.listAssets();
+    const existingHoldings = snapshotService.getHoldingsBySnapshotId(snapshot.id);
     const existingSymbols = new Set(existingHoldings.map((h) => h.asset_symbol));
 
     // Show existing holdings if any
@@ -132,10 +388,11 @@ async function addSnapshot() {
         placeholder: 'BTC, ETH, SOL...',
         defaultValue: '',
         validate: (input: string) => {
-          if (!input) return; // Allow empty to finish
+          if (!input) return undefined; // Allow empty to finish
           if (input.length > 10) {
             return 'Symbol too long (max 10 characters)';
           }
+          return undefined;
         },
       });
 
@@ -150,7 +407,7 @@ async function addSnapshot() {
       if (!symbol) break;
 
       // Get asset info
-      let asset = ledgerRepo.getAssetBySymbol(symbol);
+      let asset = snapshotService.getAssetBySymbol(symbol);
       if (!asset) {
         // Asset not found, offer to add it
         console.log(pc.yellow(`\n${symbol} not found in database.`));
@@ -177,22 +434,19 @@ async function addSnapshot() {
           continue;
         }
 
-        const ratesDb = DatabaseManager.getRatesDb(config.database.ratesPath);
-        const ratesRepo = new RatesRepository(ratesDb, config.cache.rateCacheTTL);
-        const cmcService = new CoinMarketCapService(config.api.coinmarketcap.apiKey);
-
         let assetInfo = null;
 
         if (searchMethod === 'auto') {
           const spinner = clack.spinner();
           spinner.start(`Searching for ${symbol} on CoinMarketCap...`);
-          assetInfo = await cmcService.getAssetInfoBySymbol(symbol, config.defaults.baseCurrency);
+          const searchResult = await snapshotService.searchAssetBySymbol(symbol);
           spinner.stop();
 
-          if (!assetInfo) {
+          if (!searchResult.found || !searchResult.assetInfo) {
             Logger.error(`Could not find ${symbol} on CoinMarketCap`);
             continue;
           }
+          assetInfo = searchResult.assetInfo;
         } else {
           // Manual CMC ID entry
           const cmcIdInput = await clack.text({
@@ -202,6 +456,7 @@ async function addSnapshot() {
               if (isNaN(num) || num <= 0) {
                 return 'Please enter a valid positive number';
               }
+              return undefined;
             },
           });
 
@@ -213,13 +468,14 @@ async function addSnapshot() {
 
           const spinner = clack.spinner();
           spinner.start('Fetching asset info from CoinMarketCap...');
-          assetInfo = await cmcService.getAssetInfoById(cmcId, config.defaults.baseCurrency);
+          const searchResult = await snapshotService.searchAssetById(cmcId);
           spinner.stop();
 
-          if (!assetInfo) {
+          if (!searchResult.found || !searchResult.assetInfo) {
             Logger.error(`Could not find asset with CMC ID ${cmcId}`);
             continue;
           }
+          assetInfo = searchResult.assetInfo;
         }
 
         // Display asset info for confirmation
@@ -246,15 +502,8 @@ async function addSnapshot() {
           continue;
         }
 
-        // Add asset to database with new schema
-        asset = ledgerRepo.createAsset({
-          symbol: assetInfo.symbol,
-          name: assetInfo.name,
-          external_id: assetInfo.id.toString(),
-          asset_class: 'CRYPTO',
-          valuation_source: 'CMC',
-        });
-
+        // Add asset to database using service
+        asset = snapshotService.createAssetFromInfo(assetInfo);
         Logger.success(`Added ${assetInfo.name} (${assetInfo.symbol}) to database`);
 
         // Update available assets list
@@ -277,6 +526,7 @@ async function addSnapshot() {
             if (num <= 0) {
               return 'Amount must be positive';
             }
+            return undefined;
           },
         });
 
@@ -288,11 +538,9 @@ async function addSnapshot() {
 
         const amount = parseFloat(amountInput);
 
-        // Update existing holding
-        if (existingHolding) {
-          ledgerRepo.updateHolding(existingHolding.id, { amount });
-          Logger.success(`Updated ${symbol} to ${amount}`);
-        }
+        // Update existing holding using service
+        snapshotService.addHolding(snapshot.id, asset.id, amount);
+        Logger.success(`Updated ${symbol} to ${amount}`);
         continue;
       }
 
@@ -322,13 +570,8 @@ async function addSnapshot() {
         amount,
       });
 
-      // Create holding with asset_id (new schema)
-      ledgerRepo.createHolding({
-        snapshot_id: snapshot.id,
-        asset_id: asset.id,
-        amount,
-      });
-
+      // Create holding using service
+      snapshotService.addHolding(snapshot.id, asset.id, amount);
       Logger.success(`Added ${amount} ${symbol}`);
     }
 
@@ -344,40 +587,18 @@ async function addSnapshot() {
       const spinner = clack.spinner();
       spinner.start('Fetching current prices...');
       try {
-        const ratesDb = DatabaseManager.getRatesDb(config.database.ratesPath);
-        const ratesRepo = new RatesRepository(ratesDb, config.cache.rateCacheTTL);
-        const cmcService = new CoinMarketCapService(config.api.coinmarketcap.apiKey);
+        const priceResults = await snapshotService.fetchAndCachePrices(
+          holdings.map((h) => h.asset.symbol)
+        );
 
-        for (const holding of holdings) {
-          try {
-            const price = await cmcService.getCurrentPrice(
-              holding.asset.symbol,
-              config.defaults.baseCurrency
-            );
-
-            if (price) {
-              // Update cache
-              ratesRepo.updateCachedRate(
-                holding.asset.symbol,
-                price,
-                config.defaults.baseCurrency
-              );
-
-              // Update holding with computed value_eur
-              const dbHolding = ledgerRepo
-                .getHoldingsBySnapshotId(snapshot.id)
-                .find((h) => h.asset_symbol === holding.asset.symbol);
-
-              if (dbHolding) {
-                ledgerRepo.updateHolding(dbHolding.id, {
-                  value_eur: holding.amount * price,
-                });
-              }
+        // Update holding values
+        const currentHoldings = snapshotService.getHoldingsBySnapshotId(snapshot.id);
+        for (const priceResult of priceResults) {
+          if (priceResult.price) {
+            const holding = currentHoldings.find((h) => h.asset_symbol === priceResult.symbol);
+            if (holding) {
+              snapshotService.updateHoldingValue(holding.id, holding.amount * priceResult.price);
             }
-          } catch (error) {
-            spinner.stop(
-              `Could not fetch price for ${holding.asset.symbol}: ${error instanceof Error ? error.message : String(error)}`
-            );
           }
         }
 
@@ -402,16 +623,6 @@ async function addSnapshot() {
     // Display portfolio value (prices already fetched for today's snapshots)
     if (date === today) {
       try {
-        const ratesDb = DatabaseManager.getRatesDb(config.database.ratesPath);
-        const ratesRepo = new RatesRepository(ratesDb, config.cache.rateCacheTTL);
-        const cmcService = new CoinMarketCapService(config.api.coinmarketcap.apiKey);
-        const portfolioService = new PortfolioService(
-          ledgerRepo,
-          ratesRepo,
-          cmcService,
-          config.defaults.baseCurrency
-        );
-
         const summary = await portfolioService.getPortfolioValue(date);
         if (summary) {
           console.log(
@@ -440,16 +651,6 @@ async function addSnapshot() {
         const spinner = clack.spinner();
         spinner.start('Fetching prices from CoinMarketCap...');
         try {
-          const ratesDb = DatabaseManager.getRatesDb(config.database.ratesPath);
-          const ratesRepo = new RatesRepository(ratesDb, config.cache.rateCacheTTL);
-          const cmcService = new CoinMarketCapService(config.api.coinmarketcap.apiKey);
-          const portfolioService = new PortfolioService(
-            ledgerRepo,
-            ratesRepo,
-            cmcService,
-            config.defaults.baseCurrency
-          );
-
           await portfolioService.fetchAndCachePrices(holdings.map((h) => h.asset.symbol));
 
           // Get portfolio value
@@ -472,217 +673,7 @@ async function addSnapshot() {
     DatabaseManager.closeAll();
     clack.outro('Snapshot saved successfully!');
   } catch (error) {
-    Logger.error(`Failed to add snapshot: ${error instanceof Error ? error.message : String(error)}`);
-    DatabaseManager.closeAll();
-    clack.outro('Failed to add snapshot');
-    process.exit(1);
-  }
-}
-
-async function listSnapshots(options: { assets?: string; last?: number }) {
-  clack.intro('Portfolio Snapshots');
-
-  try {
-    const env = getCurrentEnvironment();
-    const config = configManager.getWithEnvironment(env);
-    const ledgerDb = DatabaseManager.getLedgerDb(config.database.ledgerPath);
-    const ledgerRepo = new LedgerRepository(ledgerDb);
-
-    const allSnapshots = ledgerRepo.listSnapshots();
-    const totalSnapshots = allSnapshots.length;
-
-    if (allSnapshots.length === 0) {
-      Logger.info('No snapshots found');
-      DatabaseManager.closeAll();
-      clack.outro('No snapshots to display');
-      return;
-    }
-
-    // Apply --last filter to show only recent N snapshots
-    // Note: snapshots are returned in DESC order (newest first) from the database
-    let snapshots = allSnapshots;
-    if (options.last && options.last > 0) {
-      snapshots = snapshots.slice(0, options.last);
-    }
-
-    // Get all unique asset symbols across filtered snapshots
-    const allAssets = new Set<string>();
-    const snapshotData = snapshots.map((snapshot) => {
-      const holdings = ledgerRepo.getHoldingsBySnapshotId(snapshot.id);
-      const holdingsMap = new Map(
-        holdings.map((h) => {
-          allAssets.add(h.asset_symbol);
-          return [h.asset_symbol, h.amount];
-        })
-      );
-      return { snapshot, holdingsMap };
-    });
-
-    // Apply --assets filter to show only specific assets
-    let assetSymbols = Array.from(allAssets).sort();
-    if (options.assets) {
-      const requestedAssets = options.assets.split(',').map((s) => s.trim().toUpperCase());
-      assetSymbols = assetSymbols.filter((symbol) => requestedAssets.includes(symbol));
-
-      if (assetSymbols.length === 0) {
-        Logger.error('None of the requested assets were found in the snapshots');
-        DatabaseManager.closeAll();
-        clack.outro('No matching assets found');
-        return;
-      }
-    }
-
-    // Build horizontal table (dates as rows, assets as columns)
-    console.log(pc.bold(`\nPortfolio Snapshots:\n`));
-
-    // Show filter info if filters are applied
-    if (options.assets || options.last) {
-      const filters: string[] = [];
-      if (options.assets) filters.push(`assets: ${assetSymbols.join(', ')}`);
-      if (options.last) filters.push(`last ${options.last} snapshot(s)`);
-      console.log(pc.cyan(`Filters: ${filters.join(', ')}\n`));
-    }
-
-    // Header row
-    const dateColWidth = 12;
-    const assetColWidth = 15;
-    let header = 'Date'.padEnd(dateColWidth);
-    assetSymbols.forEach((symbol) => {
-      header += symbol.padEnd(assetColWidth);
-    });
-    console.log(pc.bold(header));
-    console.log('─'.repeat(dateColWidth + assetSymbols.length * assetColWidth));
-
-    // Data rows
-    for (const { snapshot, holdingsMap } of snapshotData) {
-      let row = snapshot.date.padEnd(dateColWidth);
-      assetSymbols.forEach((symbol) => {
-        const amount = holdingsMap.get(symbol);
-        const value = amount !== undefined ? amount.toString() : '─';
-        row += value.padEnd(assetColWidth);
-      });
-      console.log(row);
-    }
-
-    console.log();
-
-    DatabaseManager.closeAll();
-    const filterInfo = snapshots.length < totalSnapshots
-      ? ` (${snapshots.length} of ${totalSnapshots} total)`
-      : '';
-    clack.outro(`Found ${snapshots.length} snapshot(s)${filterInfo}`);
-  } catch (error) {
-    Logger.error(`Failed to list snapshots: ${error instanceof Error ? error.message : String(error)}`);
-    DatabaseManager.closeAll();
-    clack.outro('Failed to list snapshots');
-    process.exit(1);
-  }
-}
-
-async function viewSnapshot(date: string) {
-  clack.intro(`View Snapshot: ${date}`);
-
-  try {
-    const env = getCurrentEnvironment();
-    const config = configManager.getWithEnvironment(env);
-    const ledgerDb = DatabaseManager.getLedgerDb(config.database.ledgerPath);
-    const ratesDb = DatabaseManager.getRatesDb(config.database.ratesPath);
-    const ledgerRepo = new LedgerRepository(ledgerDb);
-    const ratesRepo = new RatesRepository(ratesDb, config.cache.rateCacheTTL);
-    const cmcService = new CoinMarketCapService(config.api.coinmarketcap.apiKey);
-    const portfolioService = new PortfolioService(
-      ledgerRepo,
-      ratesRepo,
-      cmcService,
-      config.defaults.baseCurrency
-    );
-
-    const snapshot = ledgerRepo.getSnapshotByDate(date);
-
-    if (!snapshot) {
-      Logger.error(`No snapshot found for ${date}`);
-      DatabaseManager.closeAll();
-      clack.outro('Snapshot not found');
-      return;
-    }
-
-    console.log(pc.bold(`\nSnapshot: ${snapshot.date}\n`));
-    if (snapshot.notes) {
-      console.log(pc.cyan(`Notes: ${snapshot.notes}\n`));
-    }
-
-    const summary = await portfolioService.getPortfolioValue(date);
-
-    if (!summary || summary.holdings.length === 0) {
-      Logger.info('No holdings in this snapshot');
-      DatabaseManager.closeAll();
-      clack.outro('No holdings to display');
-      return;
-    }
-
-    console.log(pc.bold('Holdings:'));
-    for (const holding of summary.holdings) {
-      const priceStr = holding.current_price_eur
-        ? formatEuro(holding.current_price_eur)
-        : 'N/A';
-      const valueStr = holding.current_value_eur
-        ? formatEuro(holding.current_value_eur)
-        : 'N/A';
-
-      console.log(`  ${pc.bold(holding.asset_symbol)} (${holding.asset_name})`);
-      console.log(
-        `    ${holding.amount} ${holding.asset_symbol}` +
-          pc.bold(' = ') +
-          pc.green(valueStr) +
-          pc.cyan(` (@ ${priceStr})`)
-      );
-      console.log();
-    }
-
-    // Show allocation comparison if targets exist
-    const allocationService = new AllocationService(ledgerRepo, portfolioService);
-    const allocationSummary = await allocationService.getAllocationSummary(date);
-
-    if (allocationSummary && allocationSummary.has_targets) {
-      console.log(pc.bold('Allocation vs Targets:'));
-
-      if (!allocationSummary.targets_sum_valid) {
-        console.log(pc.yellow('  ⚠ Warning: Targets do not sum to 100%'));
-      }
-
-      for (const alloc of allocationSummary.allocations) {
-        const arrow = alloc.is_within_tolerance
-          ? pc.green('✓')
-          : alloc.difference_percentage > 0
-            ? pc.red('▲')
-            : pc.yellow('▼');
-
-        console.log(
-          `  ${arrow} ${pc.bold(alloc.target_key)}: ` +
-            `${alloc.current_percentage.toFixed(1)}% (target: ${alloc.target_percentage.toFixed(1)}%)`
-        );
-      }
-      console.log();
-    }
-
-    if (summary.totalValue) {
-      console.log(
-        pc.bold(`Total Value: ${pc.green(formatEuro(summary.totalValue))}\n`)
-      );
-    }
-
-    // Show snapshot totals if available
-    if (snapshot.net_worth_eur !== undefined && snapshot.net_worth_eur !== null) {
-      console.log(pc.cyan(`Net Worth (cached): ${formatEuro(snapshot.net_worth_eur)}`));
-    }
-
-    DatabaseManager.closeAll();
-    clack.outro(`Snapshot loaded: ${summary.holdings.length} holding(s)`);
-  } catch (error) {
-    Logger.error(`Failed to view snapshot: ${error instanceof Error ? error.message : String(error)}`);
-    DatabaseManager.closeAll();
-    clack.outro('Failed to view snapshot');
-    process.exit(1);
+    handleSnapshotError(error);
   }
 }
 
@@ -690,50 +681,34 @@ async function deleteSnapshot(date: string, assetSymbol?: string) {
   clack.intro('Delete Snapshot');
 
   try {
-    const env = getCurrentEnvironment();
-    const config = configManager.getWithEnvironment(env);
-    const ledgerDb = DatabaseManager.getLedgerDb(config.database.ledgerPath);
-    const ledgerRepo = new LedgerRepository(ledgerDb);
+    const { snapshotService } = initializeServices();
 
     if (!validateDate(date)) {
-      Logger.error('Invalid date format. Use YYYY-MM-DD');
-      DatabaseManager.closeAll();
-      clack.outro('Invalid date format');
-      process.exit(1);
+      throw new InvalidDateError(date);
     }
 
-    const snapshot = ledgerRepo.getSnapshotByDate(date);
-    if (!snapshot) {
-      Logger.error(`No snapshot found for ${date}`);
-      DatabaseManager.closeAll();
-      clack.outro('Snapshot not found');
-      process.exit(1);
-    }
-
-    const holdings = ledgerRepo.getHoldingsBySnapshotId(snapshot.id);
+    // Get snapshot with holdings
+    const { snapshot, holdings } = snapshotService.getSnapshotByDate(date);
 
     if (assetSymbol) {
-      await deleteSingleHolding(date, assetSymbol, snapshot, holdings, ledgerRepo);
+      await deleteSingleHolding(date, assetSymbol, snapshot, holdings, snapshotService);
     } else {
-      await deleteEntireSnapshot(date, snapshot, holdings, ledgerRepo);
+      await deleteEntireSnapshot(date, snapshot, holdings, snapshotService);
     }
 
     DatabaseManager.closeAll();
     clack.outro('Deletion successful!');
   } catch (error) {
-    Logger.error(`Failed to delete: ${error instanceof Error ? error.message : String(error)}`);
-    DatabaseManager.closeAll();
-    clack.outro('Deletion failed');
-    process.exit(1);
+    handleSnapshotError(error);
   }
 }
 
 async function deleteSingleHolding(
   date: string,
   assetSymbol: string,
-  snapshot: Snapshot,
+  _snapshot: { id: number; date: string; notes?: string | null },
   holdings: HoldingWithAsset[],
-  ledgerRepo: LedgerRepository
+  snapshotService: SnapshotService
 ) {
   const normalizedSymbol = assetSymbol.toUpperCase().trim();
 
@@ -769,13 +744,13 @@ async function deleteSingleHolding(
     process.exit(0);
   }
 
-  ledgerRepo.deleteHolding(holding.id);
+  // Delete using service
+  const result = snapshotService.deleteHolding(date, normalizedSymbol);
   Logger.success(`Deleted ${normalizedSymbol} from snapshot ${date}`);
 
-  const remainingHoldings = ledgerRepo.getHoldingsBySnapshotId(snapshot.id);
-  if (remainingHoldings.length > 0) {
+  if (result.remainingHoldings.length > 0) {
     console.log(pc.bold('\nRemaining holdings:'));
-    remainingHoldings.forEach(h => {
+    result.remainingHoldings.forEach(h => {
       console.log(pc.cyan(`  - ${h.asset_symbol}: ${h.amount}`));
     });
   } else {
@@ -785,9 +760,9 @@ async function deleteSingleHolding(
 
 async function deleteEntireSnapshot(
   date: string,
-  snapshot: Snapshot,
+  snapshot: { id: number; date: string; notes?: string | null },
   holdings: HoldingWithAsset[],
-  ledgerRepo: LedgerRepository
+  snapshotService: SnapshotService
 ) {
   console.log(pc.yellow('\nYou are about to delete:'));
   console.log(pc.cyan(`  Snapshot: ${date}`));
@@ -815,6 +790,7 @@ async function deleteEntireSnapshot(
     process.exit(0);
   }
 
-  ledgerRepo.deleteSnapshot(snapshot.id);
-  Logger.success(`Deleted snapshot ${date} and all ${holdings.length} holding(s)`);
+  // Delete using service
+  const result = snapshotService.deleteSnapshot(date);
+  Logger.success(`Deleted snapshot ${date} and all ${result.deletedHoldingsCount} holding(s)`);
 }
