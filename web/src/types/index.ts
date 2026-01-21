@@ -139,6 +139,7 @@ export interface FormHolding {
   assetClass: string;
   amount: string;
   originalAmount?: number;
+  priceOverride?: string;
 }
 
 export interface FormLiabilityBalance {
@@ -167,6 +168,7 @@ export interface CreateSnapshotRequest {
 export interface AddHoldingRequest {
   assetId: number;
   amount: number;
+  priceOverride?: number;
 }
 
 export interface UpdateHoldingRequest {

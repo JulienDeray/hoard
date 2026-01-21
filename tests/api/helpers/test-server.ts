@@ -96,6 +96,7 @@ export function createMockRatesRepo() {
     getCachedRate: vi.fn(),
     updateCachedRate: vi.fn(),
     getHistoricalRate: vi.fn(),
+    saveHistoricalRate: vi.fn(),
   };
 }
 

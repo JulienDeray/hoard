@@ -63,11 +63,10 @@ export class PortfolioService {
     for (const holding of holdings) {
       let price: number | undefined;
 
-      // If holding already has value_eur from the database, use it
-      if (holding.value_eur !== undefined && holding.value_eur !== null) {
-        price = holding.value_eur / holding.amount;
-      } else if (date) {
-        // Get historical price
+      // Always try to get price from rates DB first (single source of truth)
+      // This includes manual overrides stored with source='manual'
+      if (date) {
+        // Get historical price from rates DB
         const historicalRate = this.ratesRepo.getHistoricalRate(
           holding.asset_symbol,
           date,
@@ -75,7 +74,7 @@ export class PortfolioService {
         );
         price = historicalRate?.price;
       } else {
-        // Try cache first
+        // Try cache first for current prices
         const cached = this.ratesRepo.getCachedRate(holding.asset_symbol, this.baseCurrency);
         if (cached) {
           price = cached.price;
@@ -93,10 +92,16 @@ export class PortfolioService {
         }
       }
 
+      // Only fall back to stored value_eur if no rate found (backwards compatibility)
+      const fallbackValue =
+        holding.value_eur !== undefined && holding.value_eur !== null
+          ? holding.value_eur
+          : undefined;
+
       enriched.push({
         ...holding,
         current_price_eur: price,
-        current_value_eur: price ? holding.amount * price : holding.value_eur,
+        current_value_eur: price ? holding.amount * price : fallbackValue,
       });
     }
 

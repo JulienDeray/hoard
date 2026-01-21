@@ -84,11 +84,16 @@ describe('Snapshot Routes', () => {
 
   describe('GET /api/snapshots/:date', () => {
     it('should return snapshot by date', async () => {
+      const mockHolding = { asset_symbol: 'BTC', amount: 0.5 };
+      const mockEnrichedHolding = { ...mockHolding, current_price_eur: 50000, current_value_eur: 25000 };
+
       services.snapshotService.getSnapshotWithLiabilities.mockReturnValue({
         snapshot: { id: 1, date: '2024-01-15', notes: 'Test' },
-        holdings: [{ asset_symbol: 'BTC', amount: 0.5 }],
+        holdings: [mockHolding],
         liabilityBalances: [],
       });
+
+      services.portfolioService.enrichHoldingsWithPrices.mockResolvedValue([mockEnrichedHolding]);
 
       const response = await server.inject({
         method: 'GET',
@@ -99,6 +104,7 @@ describe('Snapshot Routes', () => {
       const body = JSON.parse(response.body);
       expect(body.data.snapshot.date).toBe('2024-01-15');
       expect(body.data.holdings).toHaveLength(1);
+      expect(body.data.holdings[0].value_eur).toBe(25000);
       expect(body.data.liabilityBalances).toHaveLength(0);
     });
 

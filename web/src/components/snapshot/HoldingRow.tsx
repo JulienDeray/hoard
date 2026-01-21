@@ -6,7 +6,7 @@ import type { FormHolding } from '@/types';
 
 interface HoldingRowProps {
   holding: FormHolding;
-  onChange: (amount: string) => void;
+  onChange: (amount: string, priceOverride?: string) => void;
   onRemove: () => void;
   error?: string;
 }
@@ -32,13 +32,25 @@ export function HoldingRow({ holding, onChange, onRemove, error }: HoldingRowPro
             step="any"
             min="0"
             value={holding.amount}
-            onChange={(e) => onChange(e.target.value)}
+            onChange={(e) => onChange(e.target.value, holding.priceOverride)}
             placeholder="Amount"
             className={`w-32 ${error ? 'border-destructive' : ''}`}
           />
           {error && (
             <p className="text-xs text-destructive">{error}</p>
           )}
+        </div>
+        <div className="flex flex-col gap-1">
+          <Input
+            type="number"
+            step="any"
+            min="0"
+            value={holding.priceOverride || ''}
+            onChange={(e) => onChange(holding.amount, e.target.value)}
+            placeholder="Price (EUR)"
+            className="w-28"
+          />
+          <span className="text-xs text-muted-foreground">Optional</span>
         </div>
         <Button
           type="button"

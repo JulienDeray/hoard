@@ -6,7 +6,7 @@ import type { Asset, FormHolding } from '@/types';
 interface HoldingsListProps {
   holdings: FormHolding[];
   onAdd: (asset: Asset) => void;
-  onChange: (tempId: string, amount: string) => void;
+  onChange: (tempId: string, amount: string, priceOverride?: string) => void;
   onRemove: (tempId: string) => void;
   errors?: Record<string, string>;
 }
@@ -45,7 +45,7 @@ export function HoldingsList({
             <HoldingRow
               key={holding.tempId}
               holding={holding}
-              onChange={(amount) => onChange(holding.tempId, amount)}
+              onChange={(amount, priceOverride) => onChange(holding.tempId, amount, priceOverride)}
               onRemove={() => onRemove(holding.tempId)}
               error={errors[holding.tempId]}
             />

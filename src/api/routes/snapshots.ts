@@ -34,6 +34,7 @@ interface CreateSnapshotBody {
 interface AddHoldingBody {
   assetId: number;
   amount: number;
+  priceOverride?: number;
 }
 
 interface UpdateHoldingBody {
@@ -116,6 +117,8 @@ export async function snapshotRoutes(fastify: FastifyInstance): Promise<void> {
 
   /**
    * GET /api/snapshots/:date - Get snapshot by date with holdings and liability balances
+   * Holdings are always enriched with calculated values from the rates DB
+   * Snapshot totals are recalculated from enriched holdings
    */
   fastify.get<{ Params: DateParams }>(
     '/:date',
@@ -123,10 +126,36 @@ export async function snapshotRoutes(fastify: FastifyInstance): Promise<void> {
       const { date } = request.params;
       const result = fastify.services.snapshotService.getSnapshotWithLiabilities(date);
 
+      // Always enrich holdings with calculated values from rates DB
+      const enrichedHoldings = await fastify.services.portfolioService.enrichHoldingsWithPrices(
+        result.holdings,
+        date
+      );
+
+      // Calculate totals from enriched holdings (not from stored values)
+      const calculatedTotalAssets = enrichedHoldings.reduce(
+        (sum, h) => sum + (h.current_value_eur ?? 0),
+        0
+      );
+      const totalLiabilities = result.liabilityBalances.reduce(
+        (sum, lb) => sum + (lb.value_eur ?? 0),
+        0
+      );
+
       return {
         data: {
-          snapshot: result.snapshot,
-          holdings: result.holdings,
+          snapshot: {
+            ...result.snapshot,
+            // Override stored totals with calculated values
+            total_assets_eur: calculatedTotalAssets,
+            total_liabilities_eur: totalLiabilities,
+            net_worth_eur: calculatedTotalAssets - totalLiabilities,
+          },
+          holdings: enrichedHoldings.map((h) => ({
+            ...h,
+            // Ensure value_eur is set from the calculated current_value_eur
+            value_eur: h.current_value_eur ?? 0,
+          })),
           liabilityBalances: result.liabilityBalances.map((lb) => ({
             id: lb.id,
             snapshotId: lb.snapshot_id,
@@ -180,18 +209,34 @@ export async function snapshotRoutes(fastify: FastifyInstance): Promise<void> {
 
   /**
    * POST /api/snapshots/:date/holdings - Add a holding to a snapshot
+   * Optionally accepts priceOverride to save manual price to rates DB
    */
   fastify.post<{ Params: DateParams; Body: AddHoldingBody }>(
     '/:date/holdings',
     async (request, reply) => {
       const { date } = request.params;
-      const { assetId, amount } = request.body;
+      const { assetId, amount, priceOverride } = request.body;
 
       // Get or create snapshot
       const { snapshot } = fastify.services.snapshotService.getOrCreateSnapshot(date);
 
       // Add holding
       const result = fastify.services.snapshotService.addHolding(snapshot.id, assetId, amount);
+
+      // If price override provided, save to historical_rates with source='manual'
+      if (priceOverride !== undefined && priceOverride !== null) {
+        const asset = fastify.services.ledgerRepo.getAssetById(assetId);
+        if (asset) {
+          const timestamp = `${date}T12:00:00.000Z`;
+          fastify.services.ratesRepo.saveHistoricalRate({
+            asset_symbol: asset.symbol,
+            base_currency: 'EUR',
+            price: priceOverride,
+            timestamp,
+            source: 'manual',
+          });
+        }
+      }
 
       reply.status(result.isUpdate ? 200 : 201);
       return {

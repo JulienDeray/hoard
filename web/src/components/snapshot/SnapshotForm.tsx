@@ -131,9 +131,9 @@ export function SnapshotForm({
     setErrors((prev) => ({ ...prev, holdings: undefined }));
   }, []);
 
-  const handleChangeHolding = useCallback((tempId: string, amount: string) => {
+  const handleChangeHolding = useCallback((tempId: string, amount: string, priceOverride?: string) => {
     setHoldings((prev) =>
-      prev.map((h) => (h.tempId === tempId ? { ...h, amount } : h))
+      prev.map((h) => (h.tempId === tempId ? { ...h, amount, priceOverride } : h))
     );
     setErrors((prev) => ({
       ...prev,
@@ -230,13 +230,17 @@ export function SnapshotForm({
       // Create snapshot
       await createSnapshot.mutateAsync({ date: dateStr, notes: notes || undefined });
 
-      // Add all holdings
+      // Add all holdings (with optional price override)
       for (const holding of holdings) {
+        const priceOverride = holding.priceOverride
+          ? parseFloat(holding.priceOverride)
+          : undefined;
         await addHolding.mutateAsync({
           date: dateStr,
           data: {
             assetId: holding.assetId,
             amount: parseFloat(holding.amount),
+            priceOverride: priceOverride && !isNaN(priceOverride) ? priceOverride : undefined,
           },
         });
       }
@@ -291,14 +295,18 @@ export function SnapshotForm({
       for (const holding of holdings) {
         const original = initialData.holdings.find((h) => h.assetId === holding.assetId);
         const amount = parseFloat(holding.amount);
+        const priceOverride = holding.priceOverride
+          ? parseFloat(holding.priceOverride)
+          : undefined;
 
         if (!original) {
-          // New holding
+          // New holding (with optional price override)
           await addHolding.mutateAsync({
             date: snapshotDate,
             data: {
               assetId: holding.assetId,
               amount,
+              priceOverride: priceOverride && !isNaN(priceOverride) ? priceOverride : undefined,
             },
           });
         } else if (original.originalAmount !== amount) {
