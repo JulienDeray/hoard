@@ -1,4 +1,4 @@
-import type { HoldingWithAsset, HoldingWithValue } from '../models/index.js';
+import type { HoldingWithAsset, HoldingWithValue, PriceResult } from '../models/index.js';
 import type { LedgerRepository } from '../database/ledger.js';
 import type { RatesRepository } from '../database/rates.js';
 import type { CoinMarketCapService } from './coinmarketcap.js';
@@ -116,5 +116,88 @@ export class PortfolioService {
       );
       throw error;
     }
+  }
+
+  /**
+   * Get current prices for multiple symbols
+   * Checks cache first, fetches from CMC if missing
+   */
+  async getCurrentPrices(symbols: string[]): Promise<PriceResult[]> {
+    const results: PriceResult[] = [];
+    const now = new Date().toISOString();
+
+    for (const symbol of symbols) {
+      // Try cache first
+      const cached = this.ratesRepo.getCachedRate(symbol, this.baseCurrency);
+
+      if (cached) {
+        results.push({
+          symbol,
+          price: cached.price,
+          currency: this.baseCurrency,
+          fromCache: true,
+          timestamp: cached.last_updated,
+        });
+        continue;
+      }
+
+      // Fetch from API
+      try {
+        const price = await this.cmcService.getCurrentPrice(symbol, this.baseCurrency);
+        this.ratesRepo.updateCachedRate(symbol, price, this.baseCurrency);
+
+        results.push({
+          symbol,
+          price,
+          currency: this.baseCurrency,
+          fromCache: false,
+          timestamp: now,
+        });
+      } catch (error) {
+        results.push({
+          symbol,
+          currency: this.baseCurrency,
+          fromCache: false,
+          timestamp: now,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * Force refresh prices from CoinMarketCap (bypass cache)
+   */
+  async refreshPrices(symbols: string[]): Promise<PriceResult[]> {
+    const results: PriceResult[] = [];
+    const now = new Date().toISOString();
+
+    for (const symbol of symbols) {
+      try {
+        // Clear existing cache by fetching fresh
+        const price = await this.cmcService.getCurrentPrice(symbol, this.baseCurrency);
+        this.ratesRepo.updateCachedRate(symbol, price, this.baseCurrency);
+
+        results.push({
+          symbol,
+          price,
+          currency: this.baseCurrency,
+          fromCache: false,
+          timestamp: now,
+        });
+      } catch (error) {
+        results.push({
+          symbol,
+          currency: this.baseCurrency,
+          fromCache: false,
+          timestamp: now,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    return results;
   }
 }

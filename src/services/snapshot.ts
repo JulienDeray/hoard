@@ -91,6 +91,17 @@ export interface DeleteSnapshotResult {
   deletedHoldingsCount: number;
 }
 
+export interface UpdateHoldingInput {
+  amount?: number;
+  valueEur?: number;
+  notes?: string;
+}
+
+export interface UpdateHoldingResult {
+  holding: HoldingWithAsset;
+  previousAmount: number;
+}
+
 // ============================================================================
 // Service class
 // ============================================================================
@@ -259,6 +270,43 @@ export class SnapshotService {
   }
 
   /**
+   * Search assets by symbol or name (prefix match)
+   */
+  searchAssets(query: string, limit: number = 10): Asset[] {
+    const allAssets = this.ledgerRepo.listAssets();
+    const normalizedQuery = query.toLowerCase().trim();
+
+    if (!normalizedQuery) {
+      return allAssets.slice(0, limit);
+    }
+
+    const matches = allAssets.filter(
+      (asset) =>
+        asset.symbol.toLowerCase().startsWith(normalizedQuery) ||
+        asset.name.toLowerCase().startsWith(normalizedQuery) ||
+        asset.symbol.toLowerCase().includes(normalizedQuery) ||
+        asset.name.toLowerCase().includes(normalizedQuery)
+    );
+
+    // Sort by relevance: exact matches first, then prefix matches, then contains
+    matches.sort((a, b) => {
+      const aSymbolExact = a.symbol.toLowerCase() === normalizedQuery;
+      const bSymbolExact = b.symbol.toLowerCase() === normalizedQuery;
+      if (aSymbolExact && !bSymbolExact) return -1;
+      if (!aSymbolExact && bSymbolExact) return 1;
+
+      const aSymbolPrefix = a.symbol.toLowerCase().startsWith(normalizedQuery);
+      const bSymbolPrefix = b.symbol.toLowerCase().startsWith(normalizedQuery);
+      if (aSymbolPrefix && !bSymbolPrefix) return -1;
+      if (!aSymbolPrefix && bSymbolPrefix) return 1;
+
+      return a.symbol.localeCompare(b.symbol);
+    });
+
+    return matches.slice(0, limit);
+  }
+
+  /**
    * Search for an asset by symbol using CoinMarketCap API
    */
   async searchAssetBySymbol(symbol: string): Promise<AssetSearchResult> {
@@ -369,6 +417,61 @@ export class SnapshotService {
    */
   getHoldingsBySnapshotId(snapshotId: number): HoldingWithAsset[] {
     return this.ledgerRepo.getHoldingsBySnapshotId(snapshotId);
+  }
+
+  /**
+   * Update a holding by snapshot date and asset ID
+   * @throws SnapshotNotFoundError if snapshot doesn't exist
+   * @throws HoldingNotFoundError if holding doesn't exist in snapshot
+   * @throws InvalidAmountError if amount is invalid
+   */
+  updateHolding(
+    snapshotDate: string,
+    assetId: number,
+    input: UpdateHoldingInput
+  ): UpdateHoldingResult {
+    if (!validateDate(snapshotDate)) {
+      throw new InvalidDateError(snapshotDate);
+    }
+
+    if (input.amount !== undefined && input.amount <= 0) {
+      throw new InvalidAmountError(input.amount);
+    }
+
+    const snapshot = this.ledgerRepo.getSnapshotByDate(snapshotDate);
+    if (!snapshot) {
+      throw new SnapshotNotFoundError(snapshotDate);
+    }
+
+    const holdings = this.ledgerRepo.getHoldingsBySnapshotId(snapshot.id);
+    const holding = holdings.find((h) => h.asset_id === assetId);
+
+    if (!holding) {
+      // Get asset symbol for error message
+      const asset = this.ledgerRepo.getAssetById(assetId);
+      const symbol = asset?.symbol || `ID:${assetId}`;
+      throw new HoldingNotFoundError(symbol, snapshotDate);
+    }
+
+    const previousAmount = holding.amount;
+
+    // Build updates object
+    const updates: { amount?: number; value_eur?: number; notes?: string } = {};
+    if (input.amount !== undefined) updates.amount = input.amount;
+    if (input.valueEur !== undefined) updates.value_eur = input.valueEur;
+    if (input.notes !== undefined) updates.notes = input.notes;
+
+    // Update the holding
+    this.ledgerRepo.updateHolding(holding.id, updates);
+
+    // Fetch updated holding
+    const updatedHoldings = this.ledgerRepo.getHoldingsBySnapshotId(snapshot.id);
+    const updatedHolding = updatedHoldings.find((h) => h.asset_id === assetId)!;
+
+    return {
+      holding: updatedHolding,
+      previousAmount,
+    };
   }
 
   // ==========================================================================

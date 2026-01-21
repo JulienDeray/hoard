@@ -25,3 +25,12 @@ export interface SaveRateInput {
   market_cap?: number;
   source?: string;
 }
+
+export interface PriceResult {
+  symbol: string;
+  price?: number;
+  currency: string;
+  fromCache: boolean;
+  timestamp: string;
+  error?: string;
+}
