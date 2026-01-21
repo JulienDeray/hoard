@@ -375,6 +375,10 @@ Each feature should have:
 
 ## Important Implementation Details
 
+### Node Version
+- **Required:** Node v22.19.0
+- Always use this specific version; do not use other Node versions
+
 ### ESM Modules
 - `package.json` has `"type": "module"`
 - Use `.js` extensions in import paths (TypeScript ESM requirement)
