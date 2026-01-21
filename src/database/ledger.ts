@@ -23,6 +23,8 @@ import type {
   LegacyCreateHoldingInput,
   LegacyCreateAssetInput,
   LegacyCreateAllocationTargetInput,
+  SnapshotTotalsCache,
+  CreateSnapshotTotalsCacheInput,
 } from '../models/index.js';
 
 export class LedgerRepository {
@@ -83,18 +85,6 @@ export class LedgerRepository {
       fields.push('notes = ?');
       values.push(updates.notes);
     }
-    if (updates.total_assets_eur !== undefined) {
-      fields.push('total_assets_eur = ?');
-      values.push(updates.total_assets_eur);
-    }
-    if (updates.total_liabilities_eur !== undefined) {
-      fields.push('total_liabilities_eur = ?');
-      values.push(updates.total_liabilities_eur);
-    }
-    if (updates.net_worth_eur !== undefined) {
-      fields.push('net_worth_eur = ?');
-      values.push(updates.net_worth_eur);
-    }
 
     if (fields.length === 0) return;
 
@@ -105,18 +95,6 @@ export class LedgerRepository {
     `);
 
     stmt.run(...values);
-  }
-
-  updateSnapshotTotals(id: number, totals: { total_assets_eur: number; total_liabilities_eur: number; net_worth_eur: number }): void {
-    const stmt = this.db.prepare(`
-      UPDATE snapshots
-      SET total_assets_eur = ?,
-          total_liabilities_eur = ?,
-          net_worth_eur = ?
-      WHERE id = ?
-    `);
-
-    stmt.run(totals.total_assets_eur, totals.total_liabilities_eur, totals.net_worth_eur, id);
   }
 
   deleteSnapshot(id: number): void {
@@ -133,17 +111,19 @@ export class LedgerRepository {
 
   createHolding(input: CreateHoldingInput): Holding {
     const stmt = this.db.prepare(`
-      INSERT INTO holdings (snapshot_id, asset_id, amount, value_eur, notes)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO holdings (snapshot_id, asset_id, amount, notes)
+      VALUES (?, ?, ?, ?)
     `);
 
     const result = stmt.run(
       input.snapshot_id,
       input.asset_id,
       input.amount,
-      input.value_eur || null,
       input.notes || null
     );
+
+    // Invalidate snapshot totals cache
+    this.invalidateSnapshotCache(input.snapshot_id);
 
     return this.getHoldingById(Number(result.lastInsertRowid))!;
   }
@@ -189,7 +169,7 @@ export class LedgerRepository {
   getHoldingsBySnapshotId(snapshotId: number): HoldingWithAsset[] {
     const stmt = this.db.prepare(`
       SELECT
-        h.id, h.snapshot_id, h.asset_id, h.amount, h.value_eur, h.notes,
+        h.id, h.snapshot_id, h.asset_id, h.amount, h.notes,
         h.created_at, h.updated_at,
         a.symbol as asset_symbol, a.name as asset_name, a.asset_class
       FROM holdings h
@@ -206,7 +186,7 @@ export class LedgerRepository {
   getHoldingsByDate(date: string): HoldingWithAsset[] {
     const stmt = this.db.prepare(`
       SELECT
-        h.id, h.snapshot_id, h.asset_id, h.amount, h.value_eur, h.notes,
+        h.id, h.snapshot_id, h.asset_id, h.amount, h.notes,
         h.created_at, h.updated_at,
         a.symbol as asset_symbol, a.name as asset_name, a.asset_class
       FROM holdings h
@@ -233,16 +213,16 @@ export class LedgerRepository {
       fields.push('amount = ?');
       values.push(updates.amount);
     }
-    if (updates.value_eur !== undefined) {
-      fields.push('value_eur = ?');
-      values.push(updates.value_eur);
-    }
     if (updates.notes !== undefined) {
       fields.push('notes = ?');
       values.push(updates.notes);
     }
 
     if (fields.length === 0) return;
+
+    // Get the holding's snapshot_id before updating (for cache invalidation)
+    const holding = this.getHoldingById(id);
+    const snapshotId = holding?.snapshot_id;
 
     values.push(id);
 
@@ -251,22 +231,28 @@ export class LedgerRepository {
     `);
 
     stmt.run(...values);
-  }
 
-  updateHoldingValue(id: number, value_eur: number): void {
-    const stmt = this.db.prepare(`
-      UPDATE holdings SET value_eur = ? WHERE id = ?
-    `);
-
-    stmt.run(value_eur, id);
+    // Invalidate snapshot totals cache
+    if (snapshotId !== undefined) {
+      this.invalidateSnapshotCache(snapshotId);
+    }
   }
 
   deleteHolding(id: number): void {
+    // Get the holding's snapshot_id before deleting (for cache invalidation)
+    const holding = this.getHoldingById(id);
+    const snapshotId = holding?.snapshot_id;
+
     const stmt = this.db.prepare(`
       DELETE FROM holdings WHERE id = ?
     `);
 
     stmt.run(id);
+
+    // Invalidate snapshot totals cache
+    if (snapshotId !== undefined) {
+      this.invalidateSnapshotCache(snapshotId);
+    }
   }
 
   // ============================================================================
@@ -685,16 +671,18 @@ export class LedgerRepository {
 
   createLiabilityBalance(input: CreateLiabilityBalanceInput): LiabilityBalance {
     const stmt = this.db.prepare(`
-      INSERT INTO liability_balances (snapshot_id, liability_id, outstanding_amount, value_eur)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO liability_balances (snapshot_id, liability_id, outstanding_amount)
+      VALUES (?, ?, ?)
     `);
 
     const result = stmt.run(
       input.snapshot_id,
       input.liability_id,
-      input.outstanding_amount,
-      input.value_eur || null
+      input.outstanding_amount
     );
+
+    // Invalidate snapshot totals cache
+    this.invalidateSnapshotCache(input.snapshot_id);
 
     return this.getLiabilityBalanceById(Number(result.lastInsertRowid))!;
   }
@@ -710,7 +698,7 @@ export class LedgerRepository {
   getLiabilityBalancesBySnapshotId(snapshotId: number): LiabilityBalanceWithDetails[] {
     const stmt = this.db.prepare(`
       SELECT
-        lb.id, lb.snapshot_id, lb.liability_id, lb.outstanding_amount, lb.value_eur,
+        lb.id, lb.snapshot_id, lb.liability_id, lb.outstanding_amount,
         lb.created_at, lb.updated_at,
         l.name as liability_name, l.liability_type, l.original_amount,
         l.currency, l.interest_rate
@@ -730,12 +718,12 @@ export class LedgerRepository {
       fields.push('outstanding_amount = ?');
       values.push(updates.outstanding_amount);
     }
-    if (updates.value_eur !== undefined) {
-      fields.push('value_eur = ?');
-      values.push(updates.value_eur);
-    }
 
     if (fields.length === 0) return;
+
+    // Get the liability balance's snapshot_id before updating (for cache invalidation)
+    const liabilityBalance = this.getLiabilityBalanceById(id);
+    const snapshotId = liabilityBalance?.snapshot_id;
 
     values.push(id);
 
@@ -744,13 +732,103 @@ export class LedgerRepository {
     `);
 
     stmt.run(...values);
+
+    // Invalidate snapshot totals cache
+    if (snapshotId !== undefined) {
+      this.invalidateSnapshotCache(snapshotId);
+    }
   }
 
   deleteLiabilityBalance(id: number): void {
+    // Get the liability balance's snapshot_id before deleting (for cache invalidation)
+    const liabilityBalance = this.getLiabilityBalanceById(id);
+    const snapshotId = liabilityBalance?.snapshot_id;
+
     const stmt = this.db.prepare(`
       DELETE FROM liability_balances WHERE id = ?
     `);
 
     stmt.run(id);
+
+    // Invalidate snapshot totals cache
+    if (snapshotId !== undefined) {
+      this.invalidateSnapshotCache(snapshotId);
+    }
+  }
+
+  // ============================================================================
+  // Snapshot Totals Cache operations
+  // ============================================================================
+
+  /**
+   * Save or update snapshot totals cache
+   */
+  saveSnapshotTotalsCache(input: CreateSnapshotTotalsCacheInput): SnapshotTotalsCache {
+    const stmt = this.db.prepare(`
+      INSERT INTO snapshot_totals_cache (snapshot_id, total_assets_eur, total_liabilities_eur, net_worth_eur, cached_at)
+      VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(snapshot_id) DO UPDATE SET
+        total_assets_eur = excluded.total_assets_eur,
+        total_liabilities_eur = excluded.total_liabilities_eur,
+        net_worth_eur = excluded.net_worth_eur,
+        cached_at = CURRENT_TIMESTAMP
+    `);
+
+    stmt.run(
+      input.snapshot_id,
+      input.total_assets_eur,
+      input.total_liabilities_eur,
+      input.net_worth_eur
+    );
+
+    return this.getSnapshotTotalsCache(input.snapshot_id)!;
+  }
+
+  /**
+   * Get cached totals for a snapshot
+   * Returns null if cache miss
+   */
+  getSnapshotTotalsCache(snapshotId: number): SnapshotTotalsCache | null {
+    const stmt = this.db.prepare(`
+      SELECT * FROM snapshot_totals_cache WHERE snapshot_id = ?
+    `);
+
+    const result = stmt.get(snapshotId) as SnapshotTotalsCache | undefined;
+    return result || null;
+  }
+
+  /**
+   * Get cached totals for multiple snapshots in one query
+   * Returns a Map of snapshot_id -> SnapshotTotalsCache
+   */
+  getSnapshotTotalsCacheBulk(snapshotIds: number[]): Map<number, SnapshotTotalsCache> {
+    if (snapshotIds.length === 0) {
+      return new Map();
+    }
+
+    const placeholders = snapshotIds.map(() => '?').join(',');
+    const stmt = this.db.prepare(`
+      SELECT * FROM snapshot_totals_cache WHERE snapshot_id IN (${placeholders})
+    `);
+
+    const results = stmt.all(...snapshotIds) as SnapshotTotalsCache[];
+    const cacheMap = new Map<number, SnapshotTotalsCache>();
+
+    for (const cache of results) {
+      cacheMap.set(cache.snapshot_id, cache);
+    }
+
+    return cacheMap;
+  }
+
+  /**
+   * Invalidate cache for a snapshot (delete entry)
+   */
+  invalidateSnapshotCache(snapshotId: number): void {
+    const stmt = this.db.prepare(`
+      DELETE FROM snapshot_totals_cache WHERE snapshot_id = ?
+    `);
+
+    stmt.run(snapshotId);
   }
 }

@@ -31,6 +31,16 @@ describe('Snapshot Routes', () => {
         filteredAssetSymbols: ['BTC'],
       });
 
+      // Mock cache miss - getSnapshotTotalsCacheBulk returns empty map by default
+      // Mock calculation dependencies for cache miss path
+      services.ledgerRepo.getHoldingsBySnapshotId.mockReturnValue([
+        { asset_symbol: 'BTC', amount: 0.5 },
+      ]);
+      services.portfolioService.enrichHoldingsWithPrices.mockResolvedValue([
+        { asset_symbol: 'BTC', amount: 0.5, current_value_eur: 25000 },
+      ]);
+      services.ledgerRepo.getLiabilityBalancesBySnapshotId.mockReturnValue([]);
+
       const response = await server.inject({
         method: 'GET',
         url: '/api/snapshots',
@@ -40,6 +50,8 @@ describe('Snapshot Routes', () => {
       const body = JSON.parse(response.body);
       expect(body.data).toHaveLength(1);
       expect(body.data[0].date).toBe('2024-01-15');
+      expect(body.data[0].total_assets_eur).toBe(25000);
+      expect(body.data[0].net_worth_eur).toBe(25000);
       expect(body.count).toBe(1);
     });
 
@@ -104,7 +116,7 @@ describe('Snapshot Routes', () => {
       const body = JSON.parse(response.body);
       expect(body.data.snapshot.date).toBe('2024-01-15');
       expect(body.data.holdings).toHaveLength(1);
-      expect(body.data.holdings[0].value_eur).toBe(25000);
+      expect(body.data.holdings[0].current_value_eur).toBe(25000);
       expect(body.data.liabilityBalances).toHaveLength(0);
     });
 

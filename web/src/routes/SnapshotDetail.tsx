@@ -135,8 +135,8 @@ export function SnapshotDetail() {
 
   // Sort holdings by value descending
   const sortedHoldings = [...holdings].sort((a, b) => {
-    const valueA = a.value_eur ?? 0;
-    const valueB = b.value_eur ?? 0;
+    const valueA = a.current_value_eur ?? 0;
+    const valueB = b.current_value_eur ?? 0;
     return valueB - valueA;
   });
 
@@ -258,8 +258,8 @@ export function SnapshotDetail() {
               </TableHeader>
               <TableBody>
                 {sortedHoldings.map((holding) => {
-                  const allocationPct = snapshot.total_assets_eur && holding.value_eur
-                    ? (holding.value_eur / snapshot.total_assets_eur) * 100
+                  const allocationPct = snapshot.total_assets_eur && holding.current_value_eur
+                    ? (holding.current_value_eur / snapshot.total_assets_eur) * 100
                     : 0;
 
                   return (
@@ -281,7 +281,7 @@ export function SnapshotDetail() {
                         {formatNumber(holding.amount)}
                       </TableCell>
                       <TableCell className="text-right font-semibold">
-                        {formatCurrency(holding.value_eur)}
+                        {formatCurrency(holding.current_value_eur)}
                       </TableCell>
                       <TableCell className="text-right">
                         {formatPercentage(allocationPct)}

@@ -86,8 +86,14 @@ export function createMockLedgerRepo() {
     listAssets: vi.fn(),
     getSnapshotByDate: vi.fn(),
     getHoldingsBySnapshotId: vi.fn(),
+    getLiabilityBalancesBySnapshotId: vi.fn(),
     listAllocationTargets: vi.fn(),
     validateAllocationTargets: vi.fn(),
+    // Snapshot totals cache methods
+    getSnapshotTotalsCache: vi.fn(),
+    getSnapshotTotalsCacheBulk: vi.fn().mockReturnValue(new Map()),
+    saveSnapshotTotalsCache: vi.fn(),
+    invalidateSnapshotCache: vi.fn(),
   };
 }
 

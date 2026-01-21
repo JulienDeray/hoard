@@ -39,7 +39,6 @@ interface AddHoldingBody {
 
 interface UpdateHoldingBody {
   amount?: number;
-  valueEur?: number;
   notes?: string;
 }
 
@@ -59,6 +58,7 @@ interface UpdateLiabilityBalanceBody {
 export async function snapshotRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * GET /api/snapshots - List all snapshots
+   * Uses cache for totals to avoid expensive recalculation
    */
   fastify.get<{ Querystring: ListSnapshotsQuery }>(
     '/',
@@ -69,11 +69,62 @@ export async function snapshotRoutes(fastify: FastifyInstance): Promise<void> {
         last: last ? parseInt(last, 10) : undefined,
       });
 
+      // Get all snapshot IDs for cache lookup
+      const snapshotIds = result.snapshots.map(({ snapshot }) => snapshot.id);
+      const cacheMap = fastify.services.ledgerRepo.getSnapshotTotalsCacheBulk(snapshotIds);
+
+      // Build response with cached totals, calculating on cache miss
+      const snapshotsWithTotals = await Promise.all(
+        result.snapshots.map(async ({ snapshot, holdingsMap }) => {
+          // Check cache first
+          const cached = cacheMap.get(snapshot.id);
+          if (cached) {
+            return {
+              ...snapshot,
+              holdings_count: holdingsMap.size,
+              total_assets_eur: cached.total_assets_eur,
+              total_liabilities_eur: cached.total_liabilities_eur,
+              net_worth_eur: cached.net_worth_eur,
+            };
+          }
+
+          // Cache miss: calculate totals
+          const holdings = fastify.services.ledgerRepo.getHoldingsBySnapshotId(snapshot.id);
+          const enrichedHoldings = await fastify.services.portfolioService.enrichHoldingsWithPrices(
+            holdings,
+            snapshot.date
+          );
+          const totalAssets = enrichedHoldings.reduce(
+            (sum, h) => sum + (h.current_value_eur ?? 0),
+            0
+          );
+          const liabilityBalances = fastify.services.ledgerRepo.getLiabilityBalancesBySnapshotId(snapshot.id);
+          const totalLiabilities = liabilityBalances.reduce(
+            (sum, lb) => sum + (lb.outstanding_amount ?? 0),
+            0
+          );
+          const netWorth = totalAssets - totalLiabilities;
+
+          // Save to cache
+          fastify.services.ledgerRepo.saveSnapshotTotalsCache({
+            snapshot_id: snapshot.id,
+            total_assets_eur: totalAssets,
+            total_liabilities_eur: totalLiabilities,
+            net_worth_eur: netWorth,
+          });
+
+          return {
+            ...snapshot,
+            holdings_count: holdingsMap.size,
+            total_assets_eur: totalAssets,
+            total_liabilities_eur: totalLiabilities,
+            net_worth_eur: netWorth,
+          };
+        })
+      );
+
       return {
-        data: result.snapshots.map(({ snapshot, holdingsMap }) => ({
-          ...snapshot,
-          holdings_count: holdingsMap.size,
-        })),
+        data: snapshotsWithTotals,
         count: result.totalCount,
       };
     }
@@ -103,7 +154,6 @@ export async function snapshotRoutes(fastify: FastifyInstance): Promise<void> {
             snapshotId: lb.snapshot_id,
             liabilityId: lb.liability_id,
             outstandingAmount: lb.outstanding_amount,
-            valueEur: lb.value_eur,
             liabilityName: lb.liability_name,
             liabilityType: lb.liability_type,
             originalAmount: lb.original_amount,
@@ -118,7 +168,7 @@ export async function snapshotRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * GET /api/snapshots/:date - Get snapshot by date with holdings and liability balances
    * Holdings are always enriched with calculated values from the rates DB
-   * Snapshot totals are recalculated from enriched holdings
+   * Snapshot totals are recalculated from enriched holdings and saved to cache
    */
   fastify.get<{ Params: DateParams }>(
     '/:date',
@@ -137,31 +187,36 @@ export async function snapshotRoutes(fastify: FastifyInstance): Promise<void> {
         (sum, h) => sum + (h.current_value_eur ?? 0),
         0
       );
+      // Liabilities are all in EUR, use outstanding_amount directly
       const totalLiabilities = result.liabilityBalances.reduce(
-        (sum, lb) => sum + (lb.value_eur ?? 0),
+        (sum, lb) => sum + (lb.outstanding_amount ?? 0),
         0
       );
+      const netWorth = calculatedTotalAssets - totalLiabilities;
+
+      // Save calculated totals to cache
+      fastify.services.ledgerRepo.saveSnapshotTotalsCache({
+        snapshot_id: result.snapshot.id,
+        total_assets_eur: calculatedTotalAssets,
+        total_liabilities_eur: totalLiabilities,
+        net_worth_eur: netWorth,
+      });
 
       return {
         data: {
           snapshot: {
             ...result.snapshot,
-            // Override stored totals with calculated values
+            // Add calculated totals (computed from holdings + rates + liabilities)
             total_assets_eur: calculatedTotalAssets,
             total_liabilities_eur: totalLiabilities,
-            net_worth_eur: calculatedTotalAssets - totalLiabilities,
+            net_worth_eur: netWorth,
           },
-          holdings: enrichedHoldings.map((h) => ({
-            ...h,
-            // Ensure value_eur is set from the calculated current_value_eur
-            value_eur: h.current_value_eur ?? 0,
-          })),
+          holdings: enrichedHoldings,
           liabilityBalances: result.liabilityBalances.map((lb) => ({
             id: lb.id,
             snapshotId: lb.snapshot_id,
             liabilityId: lb.liability_id,
             outstandingAmount: lb.outstanding_amount,
-            valueEur: lb.value_eur,
             liabilityName: lb.liability_name,
             liabilityType: lb.liability_type,
             originalAmount: lb.original_amount,
@@ -255,12 +310,12 @@ export async function snapshotRoutes(fastify: FastifyInstance): Promise<void> {
     '/:date/holdings/:assetId',
     async (request: FastifyRequest<{ Params: HoldingParams; Body: UpdateHoldingBody }>) => {
       const { date, assetId } = request.params;
-      const { amount, valueEur, notes } = request.body;
+      const { amount, notes } = request.body;
 
       const result = fastify.services.snapshotService.updateHolding(
         date,
         parseInt(assetId, 10),
-        { amount, valueEur, notes }
+        { amount, notes }
       );
 
       return {
@@ -328,7 +383,6 @@ export async function snapshotRoutes(fastify: FastifyInstance): Promise<void> {
             snapshotId: result.liabilityBalance.snapshot_id,
             liabilityId: result.liabilityBalance.liability_id,
             outstandingAmount: result.liabilityBalance.outstanding_amount,
-            valueEur: result.liabilityBalance.value_eur,
             liabilityName: result.liabilityBalance.liability_name,
             liabilityType: result.liabilityBalance.liability_type,
             originalAmount: result.liabilityBalance.original_amount,
@@ -363,7 +417,6 @@ export async function snapshotRoutes(fastify: FastifyInstance): Promise<void> {
             snapshotId: result.liabilityBalance.snapshot_id,
             liabilityId: result.liabilityBalance.liability_id,
             outstandingAmount: result.liabilityBalance.outstanding_amount,
-            valueEur: result.liabilityBalance.value_eur,
             liabilityName: result.liabilityBalance.liability_name,
             liabilityType: result.liabilityBalance.liability_type,
             originalAmount: result.liabilityBalance.original_amount,

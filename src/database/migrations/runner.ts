@@ -46,6 +46,21 @@ const MIGRATIONS: Migration[] = [
     description: 'Multi-asset wealth management schema',
     sql: '003_schema_v2.sql',
   },
+  {
+    version: 4,
+    description: 'Remove redundant value_eur columns',
+    sql: '004_remove_value_eur.sql',
+  },
+  {
+    version: 5,
+    description: 'Remove redundant total columns from snapshots',
+    sql: '005_remove_snapshot_totals.sql',
+  },
+  {
+    version: 6,
+    description: 'Add snapshot totals cache for fast list queries',
+    sql: '006_snapshot_totals_cache.sql',
+  },
 ];
 
 export class MigrationRunner {

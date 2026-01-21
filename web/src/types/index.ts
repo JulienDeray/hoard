@@ -25,7 +25,6 @@ export interface LiabilityBalance {
   snapshotId: number;
   liabilityId: number;
   outstandingAmount: number;
-  valueEur?: number;
 }
 
 export interface LiabilityBalanceWithDetails extends LiabilityBalance {
@@ -60,7 +59,6 @@ export interface HoldingWithAsset {
   snapshot_id: number;
   asset_id: number;
   amount: number;
-  value_eur?: number;
   asset_symbol: string;
   asset_name: string;
   asset_class?: string;
@@ -100,7 +98,7 @@ export interface AllocationSummary {
 // API response types
 export interface SnapshotDetail {
   snapshot: Snapshot;
-  holdings: HoldingWithAsset[];
+  holdings: HoldingWithValue[];
   liabilityBalances: LiabilityBalanceWithDetails[];
 }
 
@@ -173,7 +171,6 @@ export interface AddHoldingRequest {
 
 export interface UpdateHoldingRequest {
   amount?: number;
-  valueEur?: number;
   notes?: string;
 }
 
