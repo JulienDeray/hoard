@@ -6,6 +6,7 @@ import { Logger } from '../utils/logger.js';
 
 export interface PortfolioSummary {
   date: string;
+  snapshotId: number;
   holdings: HoldingWithValue[];
   totalValue: number;
   currency: string;
@@ -46,6 +47,7 @@ export class PortfolioService {
 
     return {
       date: snapshot.date,
+      snapshotId: snapshot.id,
       holdings: holdingsWithValues,
       totalValue,
       currency: this.baseCurrency,

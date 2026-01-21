@@ -42,6 +42,19 @@ interface UpdateHoldingBody {
   notes?: string;
 }
 
+interface LiabilityBalanceParams extends DateParams {
+  liabilityId: string;
+}
+
+interface AddLiabilityBalanceBody {
+  liabilityId: number;
+  outstandingAmount: number;
+}
+
+interface UpdateLiabilityBalanceBody {
+  outstandingAmount: number;
+}
+
 export async function snapshotRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * GET /api/snapshots - List all snapshots
@@ -66,18 +79,66 @@ export async function snapshotRoutes(fastify: FastifyInstance): Promise<void> {
   );
 
   /**
-   * GET /api/snapshots/:date - Get snapshot by date with holdings
+   * GET /api/snapshots/previous - Get previous snapshot data for pre-population
+   */
+  fastify.get(
+    '/previous',
+    async () => {
+      const result = fastify.services.snapshotService.getPreviousSnapshotData();
+
+      if (!result) {
+        return {
+          data: null,
+          message: 'No previous snapshot found',
+        };
+      }
+
+      return {
+        data: {
+          date: result.date,
+          holdings: result.holdings,
+          liabilityBalances: result.liabilityBalances.map((lb) => ({
+            id: lb.id,
+            snapshotId: lb.snapshot_id,
+            liabilityId: lb.liability_id,
+            outstandingAmount: lb.outstanding_amount,
+            valueEur: lb.value_eur,
+            liabilityName: lb.liability_name,
+            liabilityType: lb.liability_type,
+            originalAmount: lb.original_amount,
+            currency: lb.currency,
+            interestRate: lb.interest_rate,
+          })),
+        },
+      };
+    }
+  );
+
+  /**
+   * GET /api/snapshots/:date - Get snapshot by date with holdings and liability balances
    */
   fastify.get<{ Params: DateParams }>(
     '/:date',
     async (request) => {
       const { date } = request.params;
-      const result = fastify.services.snapshotService.getSnapshotByDate(date);
+      const result = fastify.services.snapshotService.getSnapshotWithLiabilities(date);
 
       return {
         data: {
           snapshot: result.snapshot,
           holdings: result.holdings,
+          liabilityBalances: result.liabilityBalances.map((lb) => ({
+            id: lb.id,
+            snapshotId: lb.snapshot_id,
+            liabilityId: lb.liability_id,
+            outstandingAmount: lb.outstanding_amount,
+            valueEur: lb.value_eur,
+            liabilityName: lb.liability_name,
+            liabilityType: lb.liability_type,
+            originalAmount: lb.original_amount,
+            currency: lb.currency,
+            interestRate: lb.interest_rate,
+          })),
         },
       };
     }
@@ -186,6 +247,106 @@ export async function snapshotRoutes(fastify: FastifyInstance): Promise<void> {
         data: {
           deletedHolding: result.deletedHolding,
           remainingHoldingsCount: result.remainingHoldings.length,
+        },
+      };
+    }
+  );
+
+  // ==========================================================================
+  // Liability Balance endpoints
+  // ==========================================================================
+
+  /**
+   * POST /api/snapshots/:date/liabilities - Add a liability balance to a snapshot
+   */
+  fastify.post<{ Params: DateParams; Body: AddLiabilityBalanceBody }>(
+    '/:date/liabilities',
+    async (request, reply) => {
+      const { date } = request.params;
+      const { liabilityId, outstandingAmount } = request.body;
+
+      // Get or create snapshot
+      fastify.services.snapshotService.getOrCreateSnapshot(date);
+
+      // Add liability balance
+      const result = fastify.services.snapshotService.addLiabilityBalance(
+        date,
+        liabilityId,
+        outstandingAmount
+      );
+
+      reply.status(result.isUpdate ? 200 : 201);
+      return {
+        data: {
+          liabilityBalance: {
+            id: result.liabilityBalance.id,
+            snapshotId: result.liabilityBalance.snapshot_id,
+            liabilityId: result.liabilityBalance.liability_id,
+            outstandingAmount: result.liabilityBalance.outstanding_amount,
+            valueEur: result.liabilityBalance.value_eur,
+            liabilityName: result.liabilityBalance.liability_name,
+            liabilityType: result.liabilityBalance.liability_type,
+            originalAmount: result.liabilityBalance.original_amount,
+            currency: result.liabilityBalance.currency,
+            interestRate: result.liabilityBalance.interest_rate,
+          },
+          isUpdate: result.isUpdate,
+        },
+      };
+    }
+  );
+
+  /**
+   * PUT /api/snapshots/:date/liabilities/:liabilityId - Update a liability balance
+   */
+  fastify.put<{ Params: LiabilityBalanceParams; Body: UpdateLiabilityBalanceBody }>(
+    '/:date/liabilities/:liabilityId',
+    async (request) => {
+      const { date, liabilityId } = request.params;
+      const { outstandingAmount } = request.body;
+
+      const result = fastify.services.snapshotService.updateLiabilityBalance(
+        date,
+        parseInt(liabilityId, 10),
+        outstandingAmount
+      );
+
+      return {
+        data: {
+          liabilityBalance: {
+            id: result.liabilityBalance.id,
+            snapshotId: result.liabilityBalance.snapshot_id,
+            liabilityId: result.liabilityBalance.liability_id,
+            outstandingAmount: result.liabilityBalance.outstanding_amount,
+            valueEur: result.liabilityBalance.value_eur,
+            liabilityName: result.liabilityBalance.liability_name,
+            liabilityType: result.liabilityBalance.liability_type,
+            originalAmount: result.liabilityBalance.original_amount,
+            currency: result.liabilityBalance.currency,
+            interestRate: result.liabilityBalance.interest_rate,
+          },
+          previousAmount: result.previousAmount,
+        },
+      };
+    }
+  );
+
+  /**
+   * DELETE /api/snapshots/:date/liabilities/:liabilityId - Delete a liability balance
+   */
+  fastify.delete<{ Params: LiabilityBalanceParams }>(
+    '/:date/liabilities/:liabilityId',
+    async (request) => {
+      const { date, liabilityId } = request.params;
+
+      fastify.services.snapshotService.deleteLiabilityBalance(
+        date,
+        parseInt(liabilityId, 10)
+      );
+
+      return {
+        data: {
+          deleted: true,
         },
       };
     }

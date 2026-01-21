@@ -84,9 +84,10 @@ describe('Snapshot Routes', () => {
 
   describe('GET /api/snapshots/:date', () => {
     it('should return snapshot by date', async () => {
-      services.snapshotService.getSnapshotByDate.mockReturnValue({
+      services.snapshotService.getSnapshotWithLiabilities.mockReturnValue({
         snapshot: { id: 1, date: '2024-01-15', notes: 'Test' },
         holdings: [{ asset_symbol: 'BTC', amount: 0.5 }],
+        liabilityBalances: [],
       });
 
       const response = await server.inject({
@@ -98,10 +99,11 @@ describe('Snapshot Routes', () => {
       const body = JSON.parse(response.body);
       expect(body.data.snapshot.date).toBe('2024-01-15');
       expect(body.data.holdings).toHaveLength(1);
+      expect(body.data.liabilityBalances).toHaveLength(0);
     });
 
     it('should return 404 for non-existent snapshot', async () => {
-      services.snapshotService.getSnapshotByDate.mockImplementation(() => {
+      services.snapshotService.getSnapshotWithLiabilities.mockImplementation(() => {
         throw new SnapshotNotFoundError('2024-01-01');
       });
 

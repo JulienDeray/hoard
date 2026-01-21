@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate, Link } from 'react-router';
 import { ChevronUp, ChevronDown, Plus, RotateCcw } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -142,11 +142,19 @@ export function SnapshotList() {
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle>All Snapshots</CardTitle>
-          <CardDescription>
-            Click on a row to view snapshot details
-          </CardDescription>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle>All Snapshots</CardTitle>
+            <CardDescription>
+              Click on a row to view snapshot details
+            </CardDescription>
+          </div>
+          <Button asChild>
+            <Link to="/snapshots/new">
+              <Plus className="h-4 w-4 mr-2" />
+              Add Snapshot
+            </Link>
+          </Button>
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -161,11 +169,13 @@ export function SnapshotList() {
           ) : !snapshots || snapshots.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-8 space-y-4">
               <p className="text-muted-foreground">
-                No snapshots found. Add your first snapshot via the CLI.
+                No snapshots found. Create your first portfolio snapshot.
               </p>
-              <Button variant="outline" disabled>
-                <Plus className="h-4 w-4 mr-2" />
-                Add Snapshot
+              <Button variant="outline" asChild>
+                <Link to="/snapshots/new">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Snapshot
+                </Link>
               </Button>
             </div>
           ) : (

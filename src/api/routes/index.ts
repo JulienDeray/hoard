@@ -10,6 +10,7 @@ import { assetRoutes } from './assets.js';
 import { allocationRoutes } from './allocations.js';
 import { portfolioRoutes } from './portfolio.js';
 import { priceRoutes } from './prices.js';
+import { liabilityRoutes } from './liabilities.js';
 
 /**
  * Register all API routes under /api prefix
@@ -26,4 +27,5 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
   await fastify.register(allocationRoutes, { prefix: '/api/allocations' });
   await fastify.register(portfolioRoutes, { prefix: '/api/portfolio' });
   await fastify.register(priceRoutes, { prefix: '/api/prices' });
+  await fastify.register(liabilityRoutes, { prefix: '/api/liabilities' });
 }

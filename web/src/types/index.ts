@@ -1,6 +1,41 @@
 // Asset types
 export type AssetClass = 'CRYPTO' | 'FIAT' | 'STOCK' | 'REAL_ESTATE' | 'COMMODITY' | 'OTHER';
 
+// Liability types
+export type LiabilityType = 'LOAN' | 'MORTGAGE' | 'CREDIT_LINE';
+
+export interface Liability {
+  id: number;
+  name: string;
+  liabilityType: LiabilityType;
+  linkedAssetId?: number;
+  originalAmount: number;
+  currency: string;
+  interestRate?: number;
+  startDate?: string;
+  termMonths?: number;
+  isActive: boolean;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LiabilityBalance {
+  id: number;
+  snapshotId: number;
+  liabilityId: number;
+  outstandingAmount: number;
+  valueEur?: number;
+}
+
+export interface LiabilityBalanceWithDetails extends LiabilityBalance {
+  liabilityName: string;
+  liabilityType: LiabilityType;
+  originalAmount: number;
+  currency: string;
+  interestRate?: number;
+}
+
 export interface Asset {
   id: number;
   symbol: string;
@@ -29,6 +64,7 @@ export interface HoldingWithAsset {
   asset_symbol: string;
   asset_name: string;
   asset_class?: string;
+  notes?: string;
 }
 
 export interface HoldingWithValue extends HoldingWithAsset {
@@ -65,6 +101,13 @@ export interface AllocationSummary {
 export interface SnapshotDetail {
   snapshot: Snapshot;
   holdings: HoldingWithAsset[];
+  liabilityBalances: LiabilityBalanceWithDetails[];
+}
+
+export interface PreviousSnapshotData {
+  date: string;
+  holdings: HoldingWithAsset[];
+  liabilityBalances: LiabilityBalanceWithDetails[];
 }
 
 export interface PortfolioHolding {
@@ -85,4 +128,85 @@ export interface PortfolioSummary {
   holdings: PortfolioHolding[];
   assetCount: number;
   snapshotDate: string;
+}
+
+// Form-specific types
+export interface FormHolding {
+  tempId: string;
+  assetId: number;
+  assetSymbol: string;
+  assetName: string;
+  assetClass: string;
+  amount: string;
+  originalAmount?: number;
+}
+
+export interface FormLiabilityBalance {
+  tempId: string;
+  liabilityId: number;
+  liabilityName: string;
+  liabilityType: LiabilityType;
+  originalAmount: number;
+  outstandingAmount: string;
+  originalOutstandingAmount?: number;
+}
+
+export interface SnapshotFormData {
+  date: string;
+  notes: string;
+  holdings: FormHolding[];
+  liabilityBalances: FormLiabilityBalance[];
+}
+
+// API request/response types for mutations
+export interface CreateSnapshotRequest {
+  date: string;
+  notes?: string;
+}
+
+export interface AddHoldingRequest {
+  assetId: number;
+  amount: number;
+}
+
+export interface UpdateHoldingRequest {
+  amount?: number;
+  valueEur?: number;
+  notes?: string;
+}
+
+export interface HoldingResponse {
+  holding: HoldingWithAsset;
+  isUpdate?: boolean;
+  previousAmount?: number;
+}
+
+export interface DeleteSnapshotResponse {
+  snapshot: Snapshot;
+  deletedHoldingsCount: number;
+}
+
+export interface DeleteHoldingResponse {
+  deletedHolding: HoldingWithAsset;
+  remainingHoldingsCount: number;
+}
+
+// Liability API request/response types
+export interface AddLiabilityBalanceRequest {
+  liabilityId: number;
+  outstandingAmount: number;
+}
+
+export interface UpdateLiabilityBalanceRequest {
+  outstandingAmount: number;
+}
+
+export interface LiabilityBalanceResponse {
+  liabilityBalance: LiabilityBalanceWithDetails;
+  isUpdate?: boolean;
+  previousAmount?: number;
+}
+
+export interface DeleteLiabilityBalanceResponse {
+  deleted: boolean;
 }

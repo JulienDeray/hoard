@@ -13,6 +13,7 @@ import type {
   HoldingWithAsset,
   Asset,
   Holding,
+  LiabilityBalanceWithDetails,
 } from '../models/index.js';
 import {
   SnapshotNotFoundError,
@@ -21,6 +22,8 @@ import {
   HoldingNotFoundError,
   InvalidDateError,
   InvalidAmountError,
+  LiabilityNotFoundError,
+  LiabilityBalanceNotFoundError,
 } from '../errors/index.js';
 import { validateDate } from '../utils/validators.js';
 
@@ -100,6 +103,34 @@ export interface UpdateHoldingInput {
 export interface UpdateHoldingResult {
   holding: HoldingWithAsset;
   previousAmount: number;
+}
+
+export interface SnapshotWithHoldingsAndLiabilities {
+  snapshot: Snapshot;
+  holdings: HoldingWithAsset[];
+  liabilityBalances: LiabilityBalanceWithDetails[];
+}
+
+export interface PreviousSnapshotData {
+  date: string;
+  holdings: HoldingWithAsset[];
+  liabilityBalances: LiabilityBalanceWithDetails[];
+}
+
+export interface AddLiabilityBalanceResult {
+  liabilityBalance: LiabilityBalanceWithDetails;
+  isUpdate: boolean;
+}
+
+export interface UpdateLiabilityBalanceResult {
+  liabilityBalance: LiabilityBalanceWithDetails;
+  previousAmount: number;
+}
+
+export interface RecalculateTotalsResult {
+  totalAssetsEur: number;
+  totalLiabilitiesEur: number;
+  netWorthEur: number;
 }
 
 // ============================================================================
@@ -601,5 +632,252 @@ export class SnapshotService {
 
     const holdings = this.ledgerRepo.getHoldingsBySnapshotId(snapshot.id);
     return holdings.map((h) => h.asset_symbol);
+  }
+
+  // ==========================================================================
+  // Snapshot with liabilities operations
+  // ==========================================================================
+
+  /**
+   * Get the latest (most recent) snapshot
+   */
+  getLatestSnapshot(): Snapshot | null {
+    const snapshot = this.ledgerRepo.getLatestSnapshot();
+    return snapshot || null;
+  }
+
+  /**
+   * Get a snapshot by date with holdings and liability balances
+   * @throws SnapshotNotFoundError if snapshot doesn't exist
+   */
+  getSnapshotWithLiabilities(date: string): SnapshotWithHoldingsAndLiabilities {
+    if (!validateDate(date)) {
+      throw new InvalidDateError(date);
+    }
+
+    const snapshot = this.ledgerRepo.getSnapshotByDate(date);
+    if (!snapshot) {
+      throw new SnapshotNotFoundError(date);
+    }
+
+    const holdings = this.ledgerRepo.getHoldingsBySnapshotId(snapshot.id);
+    const liabilityBalances = this.ledgerRepo.getLiabilityBalancesBySnapshotId(snapshot.id);
+
+    return { snapshot, holdings, liabilityBalances };
+  }
+
+  /**
+   * Get previous snapshot data for pre-population
+   * Returns holdings and liability balances from the most recent snapshot
+   */
+  getPreviousSnapshotData(): PreviousSnapshotData | null {
+    const latestSnapshot = this.ledgerRepo.getLatestSnapshot();
+    if (!latestSnapshot) {
+      return null;
+    }
+
+    const holdings = this.ledgerRepo.getHoldingsBySnapshotId(latestSnapshot.id);
+    const liabilityBalances = this.ledgerRepo.getLiabilityBalancesBySnapshotId(latestSnapshot.id);
+
+    return {
+      date: latestSnapshot.date,
+      holdings,
+      liabilityBalances,
+    };
+  }
+
+  /**
+   * Recalculate and update snapshot totals
+   * @throws SnapshotNotFoundError if snapshot doesn't exist
+   */
+  recalculateSnapshotTotals(snapshotId: number): RecalculateTotalsResult {
+    const snapshot = this.ledgerRepo.getSnapshotById(snapshotId);
+    if (!snapshot) {
+      throw new SnapshotNotFoundError(`ID:${snapshotId}`);
+    }
+
+    // Calculate total assets
+    const holdings = this.ledgerRepo.getHoldingsBySnapshotId(snapshotId);
+    const totalAssetsEur = holdings.reduce((sum, h) => sum + (h.value_eur || 0), 0);
+
+    // Calculate total liabilities
+    const liabilityBalances = this.ledgerRepo.getLiabilityBalancesBySnapshotId(snapshotId);
+    const totalLiabilitiesEur = liabilityBalances.reduce(
+      (sum, lb) => sum + (lb.value_eur || lb.outstanding_amount || 0),
+      0
+    );
+
+    // Calculate net worth
+    const netWorthEur = totalAssetsEur - totalLiabilitiesEur;
+
+    // Update snapshot
+    this.ledgerRepo.updateSnapshotTotals(snapshotId, {
+      total_assets_eur: totalAssetsEur,
+      total_liabilities_eur: totalLiabilitiesEur,
+      net_worth_eur: netWorthEur,
+    });
+
+    return { totalAssetsEur, totalLiabilitiesEur, netWorthEur };
+  }
+
+  // ==========================================================================
+  // Liability balance operations
+  // ==========================================================================
+
+  /**
+   * Get liability balances for a snapshot
+   * @throws SnapshotNotFoundError if snapshot doesn't exist
+   */
+  getLiabilityBalances(snapshotDate: string): LiabilityBalanceWithDetails[] {
+    if (!validateDate(snapshotDate)) {
+      throw new InvalidDateError(snapshotDate);
+    }
+
+    const snapshot = this.ledgerRepo.getSnapshotByDate(snapshotDate);
+    if (!snapshot) {
+      throw new SnapshotNotFoundError(snapshotDate);
+    }
+
+    return this.ledgerRepo.getLiabilityBalancesBySnapshotId(snapshot.id);
+  }
+
+  /**
+   * Add a liability balance to a snapshot
+   * If the balance already exists for this liability, it will be updated
+   * @throws SnapshotNotFoundError if snapshot doesn't exist
+   * @throws LiabilityNotFoundError if liability doesn't exist
+   */
+  addLiabilityBalance(
+    snapshotDate: string,
+    liabilityId: number,
+    outstandingAmount: number
+  ): AddLiabilityBalanceResult {
+    if (!validateDate(snapshotDate)) {
+      throw new InvalidDateError(snapshotDate);
+    }
+
+    const snapshot = this.ledgerRepo.getSnapshotByDate(snapshotDate);
+    if (!snapshot) {
+      throw new SnapshotNotFoundError(snapshotDate);
+    }
+
+    // Verify liability exists
+    const liability = this.ledgerRepo.getLiabilityById(liabilityId);
+    if (!liability) {
+      throw new LiabilityNotFoundError(liabilityId);
+    }
+
+    // Check if balance already exists
+    const existingBalances = this.ledgerRepo.getLiabilityBalancesBySnapshotId(snapshot.id);
+    const existingBalance = existingBalances.find((lb) => lb.liability_id === liabilityId);
+
+    if (existingBalance) {
+      // Update existing balance
+      this.ledgerRepo.updateLiabilityBalance(existingBalance.id, {
+        outstanding_amount: outstandingAmount,
+        value_eur: outstandingAmount, // EUR only for v3
+      });
+
+      // Re-fetch to get updated data with details
+      const updatedBalances = this.ledgerRepo.getLiabilityBalancesBySnapshotId(snapshot.id);
+      const updatedBalance = updatedBalances.find((lb) => lb.liability_id === liabilityId)!;
+
+      // Recalculate totals
+      this.recalculateSnapshotTotals(snapshot.id);
+
+      return { liabilityBalance: updatedBalance, isUpdate: true };
+    }
+
+    // Create new balance
+    this.ledgerRepo.createLiabilityBalance({
+      snapshot_id: snapshot.id,
+      liability_id: liabilityId,
+      outstanding_amount: outstandingAmount,
+      value_eur: outstandingAmount, // EUR only for v3
+    });
+
+    // Fetch the created balance with details
+    const newBalances = this.ledgerRepo.getLiabilityBalancesBySnapshotId(snapshot.id);
+    const newBalance = newBalances.find((lb) => lb.liability_id === liabilityId)!;
+
+    // Recalculate totals
+    this.recalculateSnapshotTotals(snapshot.id);
+
+    return { liabilityBalance: newBalance, isUpdate: false };
+  }
+
+  /**
+   * Update a liability balance in a snapshot
+   * @throws SnapshotNotFoundError if snapshot doesn't exist
+   * @throws LiabilityBalanceNotFoundError if balance doesn't exist
+   */
+  updateLiabilityBalance(
+    snapshotDate: string,
+    liabilityId: number,
+    outstandingAmount: number
+  ): UpdateLiabilityBalanceResult {
+    if (!validateDate(snapshotDate)) {
+      throw new InvalidDateError(snapshotDate);
+    }
+
+    const snapshot = this.ledgerRepo.getSnapshotByDate(snapshotDate);
+    if (!snapshot) {
+      throw new SnapshotNotFoundError(snapshotDate);
+    }
+
+    // Find existing balance
+    const existingBalances = this.ledgerRepo.getLiabilityBalancesBySnapshotId(snapshot.id);
+    const existingBalance = existingBalances.find((lb) => lb.liability_id === liabilityId);
+
+    if (!existingBalance) {
+      throw new LiabilityBalanceNotFoundError(snapshotDate, liabilityId);
+    }
+
+    const previousAmount = existingBalance.outstanding_amount;
+
+    // Update balance
+    this.ledgerRepo.updateLiabilityBalance(existingBalance.id, {
+      outstanding_amount: outstandingAmount,
+      value_eur: outstandingAmount, // EUR only for v3
+    });
+
+    // Re-fetch to get updated data with details
+    const updatedBalances = this.ledgerRepo.getLiabilityBalancesBySnapshotId(snapshot.id);
+    const updatedBalance = updatedBalances.find((lb) => lb.liability_id === liabilityId)!;
+
+    // Recalculate totals
+    this.recalculateSnapshotTotals(snapshot.id);
+
+    return { liabilityBalance: updatedBalance, previousAmount };
+  }
+
+  /**
+   * Delete a liability balance from a snapshot
+   * @throws SnapshotNotFoundError if snapshot doesn't exist
+   * @throws LiabilityBalanceNotFoundError if balance doesn't exist
+   */
+  deleteLiabilityBalance(snapshotDate: string, liabilityId: number): void {
+    if (!validateDate(snapshotDate)) {
+      throw new InvalidDateError(snapshotDate);
+    }
+
+    const snapshot = this.ledgerRepo.getSnapshotByDate(snapshotDate);
+    if (!snapshot) {
+      throw new SnapshotNotFoundError(snapshotDate);
+    }
+
+    // Find existing balance
+    const existingBalances = this.ledgerRepo.getLiabilityBalancesBySnapshotId(snapshot.id);
+    const existingBalance = existingBalances.find((lb) => lb.liability_id === liabilityId);
+
+    if (!existingBalance) {
+      throw new LiabilityBalanceNotFoundError(snapshotDate, liabilityId);
+    }
+
+    // Delete balance
+    this.ledgerRepo.deleteLiabilityBalance(existingBalance.id);
+
+    // Recalculate totals
+    this.recalculateSnapshotTotals(snapshot.id);
   }
 }

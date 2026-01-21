@@ -140,3 +140,25 @@ export class PriceFetchError extends ServiceError {
     super(`Could not fetch price for ${symbol}: ${reason}`, 'PRICE_FETCH_FAILED');
   }
 }
+
+// ============================================================================
+// Liability-related errors
+// ============================================================================
+
+export class LiabilityNotFoundError extends ServiceError {
+  constructor(public readonly id: number) {
+    super(`Liability with ID ${id} not found`, 'LIABILITY_NOT_FOUND');
+  }
+}
+
+export class LiabilityBalanceNotFoundError extends ServiceError {
+  constructor(
+    public readonly snapshotDate: string,
+    public readonly liabilityId: number
+  ) {
+    super(
+      `Liability balance not found for liability ${liabilityId} in snapshot ${snapshotDate}`,
+      'LIABILITY_BALANCE_NOT_FOUND'
+    );
+  }
+}

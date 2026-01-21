@@ -17,22 +17,41 @@ export interface MockServices {
   portfolioService: ReturnType<typeof createMockPortfolioService>;
   ledgerRepo: ReturnType<typeof createMockLedgerRepo>;
   ratesRepo: ReturnType<typeof createMockRatesRepo>;
+  liabilityService: ReturnType<typeof createMockLiabilityService>;
 }
 
 export function createMockSnapshotService() {
   return {
     listSnapshots: vi.fn(),
     getSnapshotByDate: vi.fn(),
+    getSnapshotWithLiabilities: vi.fn(),
+    getLatestSnapshot: vi.fn(),
+    getPreviousSnapshotData: vi.fn(),
     createSnapshot: vi.fn(),
     deleteSnapshot: vi.fn(),
     getOrCreateSnapshot: vi.fn(),
     addHolding: vi.fn(),
     updateHolding: vi.fn(),
     deleteHolding: vi.fn(),
+    getLiabilityBalances: vi.fn(),
+    addLiabilityBalance: vi.fn(),
+    updateLiabilityBalance: vi.fn(),
+    deleteLiabilityBalance: vi.fn(),
+    recalculateSnapshotTotals: vi.fn(),
     listAssets: vi.fn(),
     searchAssets: vi.fn(),
     checkSnapshotExists: vi.fn(),
     getHoldingsBySnapshotId: vi.fn(),
+  };
+}
+
+export function createMockLiabilityService() {
+  return {
+    listLiabilities: vi.fn(),
+    getLiabilityById: vi.fn(),
+    createLiability: vi.fn(),
+    updateLiability: vi.fn(),
+    deleteLiability: vi.fn(),
   };
 }
 
@@ -88,6 +107,7 @@ export function createMockServices(): MockServices {
     portfolioService: createMockPortfolioService(),
     ledgerRepo: createMockLedgerRepo(),
     ratesRepo: createMockRatesRepo(),
+    liabilityService: createMockLiabilityService(),
   };
 }
 

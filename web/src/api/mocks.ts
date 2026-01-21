@@ -2,7 +2,6 @@ import type {
   Snapshot,
   SnapshotDetail,
   HoldingWithAsset,
-  HoldingWithValue,
   PortfolioSummary,
   AllocationSummary,
   AllocationComparison,
@@ -154,7 +153,7 @@ export async function getSnapshot(date: string): Promise<SnapshotDetail> {
 
   const holdings = mockHoldingsMap[date] || [];
 
-  return { snapshot, holdings };
+  return { snapshot, holdings, liabilityBalances: [] };
 }
 
 export async function getPortfolioSummary(): Promise<PortfolioSummary> {
@@ -162,20 +161,26 @@ export async function getPortfolioSummary(): Promise<PortfolioSummary> {
 
   const latestSnapshot = mockSnapshots[mockSnapshots.length - 1];
   const holdings = mockHoldingsMap[latestSnapshot.date] || [];
+  const totalAssetsEur = latestSnapshot.total_assets_eur || 0;
 
-  const holdingsWithValue: HoldingWithValue[] = holdings.map((h) => ({
-    ...h,
-    current_price_eur: h.value_eur ? h.value_eur / h.amount : undefined,
-    current_value_eur: h.value_eur,
+  const portfolioHoldings = holdings.map((h) => ({
+    assetId: h.asset_id,
+    symbol: h.asset_symbol,
+    name: h.asset_name,
+    assetClass: h.asset_class as 'CRYPTO' | 'FIAT' | 'STOCK' | 'REAL_ESTATE' | 'COMMODITY' | 'OTHER',
+    amount: h.amount,
+    valueEur: h.value_eur || 0,
+    allocationPct: totalAssetsEur > 0 ? ((h.value_eur || 0) / totalAssetsEur) * 100 : 0,
   }));
 
   return {
     date: latestSnapshot.date,
-    total_value: latestSnapshot.total_assets_eur || 0,
-    currency: 'EUR',
-    holdings: holdingsWithValue,
-    snapshot_count: mockSnapshots.length,
-    last_update: latestSnapshot.date,
+    totalAssetsEur,
+    totalLiabilitiesEur: 0,
+    netWorthEur: totalAssetsEur,
+    holdings: portfolioHoldings,
+    assetCount: holdings.length,
+    snapshotDate: latestSnapshot.date,
   };
 }
 

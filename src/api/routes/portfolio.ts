@@ -39,7 +39,18 @@ export async function portfolioRoutes(fastify: FastifyInstance): Promise<void> {
       }
 
       const totalAssetsEur = portfolio.totalValue;
-      const totalLiabilitiesEur = 0; // v3 scope - hardcoded for now
+
+      // Calculate actual liabilities from liability_balances
+      let totalLiabilitiesEur = 0;
+      if (portfolio.snapshotId) {
+        const liabilityBalances = fastify.services.ledgerRepo.getLiabilityBalancesBySnapshotId(
+          portfolio.snapshotId
+        );
+        totalLiabilitiesEur = liabilityBalances.reduce(
+          (sum, lb) => sum + (lb.value_eur || lb.outstanding_amount || 0),
+          0
+        );
+      }
 
       // Transform holdings to new format with allocation percentage
       const holdingsWithAllocation: PortfolioHoldingResponse[] = portfolio.holdings.map(

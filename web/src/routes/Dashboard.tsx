@@ -48,7 +48,7 @@ export function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {portfolio ? formatCurrency(portfolio.total_value) : '-'}
+                {portfolio ? formatCurrency(portfolio.netWorthEur) : '-'}
               </div>
               <p className="text-xs text-muted-foreground">
                 As of {portfolio?.date || '-'}
@@ -78,7 +78,7 @@ export function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {portfolio?.last_update || '-'}
+                {portfolio?.snapshotDate || '-'}
               </div>
               <p className="text-xs text-muted-foreground">
                 Most recent snapshot

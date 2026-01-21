@@ -4,6 +4,8 @@ import { Layout } from '@/components/Layout';
 import { Dashboard } from '@/routes/Dashboard';
 import { SnapshotList } from '@/routes/SnapshotList';
 import { SnapshotDetail } from '@/routes/SnapshotDetail';
+import { SnapshotNew } from '@/routes/SnapshotNew';
+import { SnapshotEdit } from '@/routes/SnapshotEdit';
 import { Portfolio } from '@/routes/Portfolio';
 import { Allocations } from '@/routes/Allocations';
 
@@ -24,7 +26,9 @@ function App() {
           <Route element={<Layout />}>
             <Route path="/" element={<Dashboard />} />
             <Route path="/snapshots" element={<SnapshotList />} />
+            <Route path="/snapshots/new" element={<SnapshotNew />} />
             <Route path="/snapshots/:date" element={<SnapshotDetail />} />
+            <Route path="/snapshots/:date/edit" element={<SnapshotEdit />} />
             <Route path="/portfolio" element={<Portfolio />} />
             <Route path="/allocations" element={<Allocations />} />
           </Route>
