@@ -652,7 +652,25 @@ async function addSnapshot() {
         const spinner = clack.spinner();
         spinner.start('Fetching prices from CoinMarketCap...');
         try {
-          await portfolioService.fetchAndCachePrices(holdings.map((h) => h.asset.symbol));
+          const priceResults = await snapshotService.fetchAndCachePrices(
+            holdings.map((h) => h.asset.symbol)
+          );
+
+          // Update holding values (same as today's snapshot logic)
+          const currentHoldings = snapshotService.getHoldingsBySnapshotId(snapshot.id);
+          for (const priceResult of priceResults) {
+            if (priceResult.price) {
+              const holding = currentHoldings.find(
+                (h) => h.asset_symbol === priceResult.symbol
+              );
+              if (holding) {
+                snapshotService.updateHoldingValue(
+                  holding.id,
+                  holding.amount * priceResult.price
+                );
+              }
+            }
+          }
 
           // Get portfolio value
           const summary = await portfolioService.getPortfolioValue(date);
