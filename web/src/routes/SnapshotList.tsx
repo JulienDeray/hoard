@@ -1,4 +1,6 @@
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router';
+import { ChevronUp, ChevronDown, Plus, RotateCcw } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Table,
@@ -8,11 +10,22 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Button } from '@/components/ui/button';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { useSnapshots } from '@/api/hooks';
+import type { Snapshot } from '@/types';
+
+type SortKey = 'date' | 'netWorth';
+type SortOrder = 'asc' | 'desc';
 
 function formatCurrency(value: number | undefined, currency: string = 'EUR'): string {
   if (value === undefined) return '-';
-  return new Intl.NumberFormat('fr-FR', {
+  return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency,
   }).format(value);
@@ -20,16 +33,84 @@ function formatCurrency(value: number | undefined, currency: string = 'EUR'): st
 
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr);
-  return new Intl.DateTimeFormat('fr-FR', {
+  return new Intl.DateTimeFormat('en-US', {
     year: 'numeric',
-    month: 'long',
+    month: 'short',
     day: 'numeric',
   }).format(date);
 }
 
+function truncateText(text: string, maxLength: number): string {
+  if (text.length <= maxLength) return text;
+  return text.slice(0, maxLength) + '...';
+}
+
+interface SortableHeaderProps {
+  label: string;
+  sortKey: SortKey;
+  currentSortKey: SortKey;
+  currentSortOrder: SortOrder;
+  onSort: (key: SortKey) => void;
+  className?: string;
+}
+
+function SortableHeader({
+  label,
+  sortKey,
+  currentSortKey,
+  currentSortOrder,
+  onSort,
+  className,
+}: SortableHeaderProps) {
+  const isActive = currentSortKey === sortKey;
+  const Icon = currentSortOrder === 'asc' ? ChevronUp : ChevronDown;
+
+  return (
+    <TableHead className={className}>
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className="inline-flex items-center gap-1 hover:text-foreground transition-colors"
+      >
+        {label}
+        {isActive && <Icon className="h-4 w-4" />}
+      </button>
+    </TableHead>
+  );
+}
+
 export function SnapshotList() {
   const navigate = useNavigate();
-  const { data: snapshots, isLoading, error } = useSnapshots();
+  const { data: snapshots, isLoading, error, refetch } = useSnapshots();
+  const [sortKey, setSortKey] = useState<SortKey>('date');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
+
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortKey(key);
+      setSortOrder('desc');
+    }
+  };
+
+  const sortedSnapshots = useMemo(() => {
+    if (!snapshots) return [];
+
+    return [...snapshots].sort((a: Snapshot, b: Snapshot) => {
+      let comparison = 0;
+
+      if (sortKey === 'date') {
+        comparison = new Date(a.date).getTime() - new Date(b.date).getTime();
+      } else if (sortKey === 'netWorth') {
+        const aValue = a.net_worth_eur ?? 0;
+        const bValue = b.net_worth_eur ?? 0;
+        comparison = aValue - bValue;
+      }
+
+      return sortOrder === 'asc' ? comparison : -comparison;
+    });
+  }, [snapshots, sortKey, sortOrder]);
 
   if (error) {
     return (
@@ -40,7 +121,13 @@ export function SnapshotList() {
         </div>
         <Card>
           <CardContent className="pt-6">
-            <p className="text-destructive">Error loading snapshots: {String(error)}</p>
+            <div className="flex flex-col items-center justify-center py-8 space-y-4">
+              <p className="text-destructive">Error loading snapshots: {String(error)}</p>
+              <Button variant="outline" onClick={() => refetch()}>
+                <RotateCcw className="h-4 w-4 mr-2" />
+                Retry
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -72,42 +159,82 @@ export function SnapshotList() {
               ))}
             </div>
           ) : !snapshots || snapshots.length === 0 ? (
-            <p className="text-center text-muted-foreground py-8">
-              No snapshots found. Add your first snapshot via the CLI.
-            </p>
+            <div className="flex flex-col items-center justify-center py-8 space-y-4">
+              <p className="text-muted-foreground">
+                No snapshots found. Add your first snapshot via the CLI.
+              </p>
+              <Button variant="outline" disabled>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Snapshot
+              </Button>
+            </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Notes</TableHead>
-                  <TableHead className="text-right">Total Assets</TableHead>
-                  <TableHead className="text-right">Net Worth</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {snapshots.map((snapshot) => (
-                  <TableRow
-                    key={snapshot.id}
-                    className="cursor-pointer"
-                    onClick={() => navigate(`/snapshots/${snapshot.date}`)}
-                  >
-                    <TableCell className="font-medium">
-                      {formatDate(snapshot.date)}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {snapshot.notes || '-'}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {formatCurrency(snapshot.total_assets_eur)}
-                    </TableCell>
-                    <TableCell className="text-right font-semibold">
-                      {formatCurrency(snapshot.net_worth_eur)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <TooltipProvider>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <SortableHeader
+                        label="Date"
+                        sortKey="date"
+                        currentSortKey={sortKey}
+                        currentSortOrder={sortOrder}
+                        onSort={handleSort}
+                      />
+                      <SortableHeader
+                        label="Net Worth"
+                        sortKey="netWorth"
+                        currentSortKey={sortKey}
+                        currentSortOrder={sortOrder}
+                        onSort={handleSort}
+                        className="text-right"
+                      />
+                      <TableHead className="text-right">Assets</TableHead>
+                      <TableHead>Notes</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {sortedSnapshots.map((snapshot) => (
+                      <TableRow
+                        key={snapshot.id}
+                        className="cursor-pointer"
+                        onClick={() => navigate(`/snapshots/${snapshot.date}`)}
+                      >
+                        <TableCell className="font-medium">
+                          {formatDate(snapshot.date)}
+                        </TableCell>
+                        <TableCell className="text-right font-semibold">
+                          {formatCurrency(snapshot.net_worth_eur)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {snapshot.holdings_count ?? '-'}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {snapshot.notes ? (
+                            snapshot.notes.length > 30 ? (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="cursor-help">
+                                    {truncateText(snapshot.notes, 30)}
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p className="max-w-xs">{snapshot.notes}</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            ) : (
+                              snapshot.notes
+                            )
+                          ) : (
+                            '-'
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </TooltipProvider>
           )}
         </CardContent>
       </Card>

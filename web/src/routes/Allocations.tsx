@@ -1,5 +1,6 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import {
   Table,
   TableBody,
@@ -9,8 +10,9 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { useAllocationComparison } from '@/api/hooks';
-import { ArrowDown, ArrowUp, Check, Target } from 'lucide-react';
+import { AlertCircle, ArrowDown, ArrowUp, Check, RefreshCw, Target } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { AllocationBar } from '@/components/AllocationBar';
 
 function formatCurrency(value: number, currency: string = 'EUR'): string {
   return new Intl.NumberFormat('fr-FR', {
@@ -33,7 +35,7 @@ function formatDifference(value: number): string {
 }
 
 export function Allocations() {
-  const { data: allocationSummary, isLoading, error } = useAllocationComparison();
+  const { data: allocationSummary, isLoading, error, refetch } = useAllocationComparison();
 
   if (error) {
     return (
@@ -44,7 +46,17 @@ export function Allocations() {
         </div>
         <Card>
           <CardContent className="pt-6">
-            <p className="text-destructive">Error loading allocations: {String(error)}</p>
+            <div className="flex flex-col items-center justify-center py-8 text-center">
+              <AlertCircle className="mb-4 h-12 w-12 text-destructive" />
+              <h3 className="text-lg font-semibold">Failed to Load Allocations</h3>
+              <p className="text-muted-foreground mt-2">
+                {error instanceof Error ? error.message : String(error)}
+              </p>
+              <Button onClick={() => refetch()} className="mt-4">
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Try Again
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -175,7 +187,8 @@ export function Allocations() {
                 <TableHead className="text-right">Current</TableHead>
                 <TableHead className="text-right">Target</TableHead>
                 <TableHead className="text-right">Drift</TableHead>
-                <TableHead className="text-right">Adjustment</TableHead>
+                <TableHead className="hidden lg:table-cell">Visualization</TableHead>
+                <TableHead className="hidden md:table-cell text-right">Adjustment</TableHead>
                 <TableHead className="text-center">Status</TableHead>
               </TableRow>
             </TableHeader>
@@ -214,7 +227,13 @@ export function Allocations() {
                         {formatDifference(allocation.difference_percentage)}
                       </div>
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="hidden lg:table-cell">
+                      <AllocationBar
+                        current={allocation.current_percentage}
+                        target={allocation.target_percentage}
+                      />
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell text-right">
                       <span
                         className={cn(
                           'text-sm',

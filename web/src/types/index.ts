@@ -16,6 +16,7 @@ export interface Snapshot {
   total_assets_eur?: number;
   total_liabilities_eur?: number;
   net_worth_eur?: number;
+  holdings_count?: number;
 }
 
 // Holding types
@@ -66,11 +67,22 @@ export interface SnapshotDetail {
   holdings: HoldingWithAsset[];
 }
 
+export interface PortfolioHolding {
+  assetId: number;
+  symbol: string;
+  name: string;
+  assetClass: AssetClass;
+  amount: number;
+  valueEur: number;
+  allocationPct: number;
+}
+
 export interface PortfolioSummary {
   date: string;
-  total_value: number;
-  currency: string;
-  holdings: HoldingWithValue[];
-  snapshot_count: number;
-  last_update: string;
+  totalAssetsEur: number;
+  totalLiabilitiesEur: number;
+  netWorthEur: number;
+  holdings: PortfolioHolding[];
+  assetCount: number;
+  snapshotDate: string;
 }

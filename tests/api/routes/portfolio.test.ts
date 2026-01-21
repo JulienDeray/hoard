@@ -23,15 +23,23 @@ describe('Portfolio Routes', () => {
         totalValue: 50000,
         currency: 'EUR',
         holdings: [
-          { asset_symbol: 'BTC', amount: 0.5, current_value_eur: 22500 },
-          { asset_symbol: 'ETH', amount: 10, current_value_eur: 27500 },
+          {
+            asset_id: 1,
+            asset_symbol: 'BTC',
+            asset_name: 'Bitcoin',
+            asset_class: 'CRYPTO',
+            amount: 0.5,
+            current_value_eur: 22500,
+          },
+          {
+            asset_id: 2,
+            asset_symbol: 'ETH',
+            asset_name: 'Ethereum',
+            asset_class: 'CRYPTO',
+            amount: 10,
+            current_value_eur: 27500,
+          },
         ],
-      });
-      services.snapshotService.listSnapshots.mockReturnValue({
-        snapshots: [],
-        totalCount: 5,
-        allAssetSymbols: [],
-        filteredAssetSymbols: [],
       });
 
       const response = await server.inject({
@@ -41,11 +49,25 @@ describe('Portfolio Routes', () => {
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
-      expect(body.data.total_value).toBe(50000);
-      expect(body.data.currency).toBe('EUR');
+      expect(body.data.totalAssetsEur).toBe(50000);
+      expect(body.data.totalLiabilitiesEur).toBe(0);
+      expect(body.data.netWorthEur).toBe(50000);
+      expect(body.data.assetCount).toBe(2);
+      expect(body.data.snapshotDate).toBe('2024-01-15');
       expect(body.data.holdings).toHaveLength(2);
-      expect(body.data.snapshot_count).toBe(5);
-      expect(body.data.last_update).toBeDefined();
+      // Verify holdings are sorted by allocation descending
+      expect(body.data.holdings[0].symbol).toBe('ETH'); // 55% allocation
+      expect(body.data.holdings[1].symbol).toBe('BTC'); // 45% allocation
+      // Verify holding structure
+      expect(body.data.holdings[0]).toMatchObject({
+        assetId: 2,
+        symbol: 'ETH',
+        name: 'Ethereum',
+        assetClass: 'CRYPTO',
+        amount: 10,
+        valueEur: 27500,
+        allocationPct: 55,
+      });
     });
 
     it('should return null when no portfolio data', async () => {
