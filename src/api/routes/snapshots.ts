@@ -94,10 +94,13 @@ export async function snapshotRoutes(fastify: FastifyInstance): Promise<void> {
             holdings,
             snapshot.date
           );
-          const totalAssets = enrichedHoldings.reduce(
+          const holdingsTotal = enrichedHoldings.reduce(
             (sum, h) => sum + (h.current_value_eur ?? 0),
             0
           );
+          // Add real estate equity to total assets
+          const realEstateSummary = fastify.services.propertyService.getRealEstateSummary();
+          const totalAssets = holdingsTotal + realEstateSummary.totalEquity;
           const liabilityBalances = fastify.services.ledgerRepo.getLiabilityBalancesBySnapshotId(snapshot.id);
           const totalLiabilities = liabilityBalances.reduce(
             (sum, lb) => sum + (lb.outstanding_amount ?? 0),
@@ -183,10 +186,13 @@ export async function snapshotRoutes(fastify: FastifyInstance): Promise<void> {
       );
 
       // Calculate totals from enriched holdings (not from stored values)
-      const calculatedTotalAssets = enrichedHoldings.reduce(
+      const holdingsTotal = enrichedHoldings.reduce(
         (sum, h) => sum + (h.current_value_eur ?? 0),
         0
       );
+      // Add real estate equity to total assets
+      const realEstateSummary = fastify.services.propertyService.getRealEstateSummary();
+      const calculatedTotalAssets = holdingsTotal + realEstateSummary.totalEquity;
       // Liabilities are all in EUR, use outstanding_amount directly
       const totalLiabilities = result.liabilityBalances.reduce(
         (sum, lb) => sum + (lb.outstanding_amount ?? 0),

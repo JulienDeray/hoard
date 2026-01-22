@@ -9,27 +9,41 @@ export interface BackfillResult {
 }
 
 /**
+ * Clear all snapshot totals cache entries
+ * Forces recalculation which now includes real estate equity
+ */
+function clearSnapshotTotalsCache(ledgerDb: Database.Database): BackfillResult {
+  Logger.info('Clearing snapshot totals cache (will recalculate with real estate)...');
+
+  const stmt = ledgerDb.prepare('DELETE FROM snapshot_totals_cache');
+  const result = stmt.run();
+
+  Logger.info(`Cleared ${result.changes} cached snapshot totals`);
+
+  return {
+    processed: result.changes,
+    updated: result.changes,
+    skipped: 0,
+    errors: [],
+  };
+}
+
+/**
  * Runs all backfill operations after schema migration
- * Note: Snapshot totals are now calculated dynamically, no backfill needed
  */
 export async function runAllBackfills(
-  _ledgerDb: Database.Database
+  ledgerDb: Database.Database
 ): Promise<{
   snapshots: BackfillResult;
 }> {
   Logger.info('Starting backfill operations...');
 
-  // No backfill needed - snapshot totals are calculated dynamically from holdings + rates
-  Logger.info('No backfill operations needed');
+  // Clear snapshot totals cache so they get recalculated with real estate equity
+  const cacheResult = clearSnapshotTotalsCache(ledgerDb);
 
   Logger.success('All backfill operations complete');
 
   return {
-    snapshots: {
-      processed: 0,
-      updated: 0,
-      skipped: 0,
-      errors: [],
-    },
+    snapshots: cacheResult,
   };
 }

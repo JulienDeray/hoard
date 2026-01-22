@@ -837,6 +837,19 @@ export class LedgerRepository {
     stmt.run(snapshotId);
   }
 
+  /**
+   * Invalidate all snapshot totals caches
+   * Used when calculation logic changes (e.g., adding real estate to net worth)
+   */
+  invalidateAllSnapshotCaches(): number {
+    const stmt = this.db.prepare(`
+      DELETE FROM snapshot_totals_cache
+    `);
+
+    const result = stmt.run();
+    return result.changes;
+  }
+
   // ============================================================================
   // Real Estate / Property operations
   // ============================================================================
