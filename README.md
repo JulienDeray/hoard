@@ -164,6 +164,29 @@ Run in development mode:
 npm run dev [command]
 ```
 
+Run against production database:
+```bash
+npm run dev -- --env prod [command]
+```
+
+### Database Migrations
+
+Run pending migrations:
+```bash
+npm run dev migrate                    # Development
+npm run dev -- --env prod migrate      # Production
+```
+
+Preview migrations without applying:
+```bash
+npm run dev migrate --dry-run
+```
+
+Check current schema version:
+```bash
+npm run dev migrate --status
+```
+
 Run tests:
 ```bash
 npm test

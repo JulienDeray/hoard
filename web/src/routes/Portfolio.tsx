@@ -261,7 +261,7 @@ export function Portfolio() {
       )}
 
       {/* Allocation Bar - Asset Class Distribution */}
-      {portfolio.assetClassAllocation.length > 0 && (
+      {portfolio.assetClassAllocation?.length > 0 && (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Asset Allocation</CardTitle>
