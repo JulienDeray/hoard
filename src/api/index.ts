@@ -30,7 +30,7 @@ async function main() {
   try {
     if (!configManager.isConfigured()) {
       console.error('Error: API keys not configured.');
-      console.error('Please set COINMARKETCAP_API_KEY and ANTHROPIC_API_KEY in .env');
+      console.error('Please set CMC_API_KEY in .env');
       process.exit(1);
     }
   } catch {

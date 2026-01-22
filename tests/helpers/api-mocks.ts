@@ -15,11 +15,3 @@ export const mockCoinMarketCapService = () => ({
     market_cap: 900000000000,
   }),
 });
-
-export const mockClaudeService = () => ({
-  processQuery: vi.fn().mockResolvedValue('Mocked Claude response'),
-});
-
-export const mockQueryProcessor = () => ({
-  processQuery: vi.fn().mockResolvedValue('Query result'),
-});

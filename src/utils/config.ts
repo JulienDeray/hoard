@@ -13,10 +13,6 @@ const configSchema = z.object({
     coinmarketcap: z.object({
       apiKey: z.string().default(''),
     }),
-    anthropic: z.object({
-      apiKey: z.string().default(''),
-      model: z.string().default('claude-haiku-4-5'),
-    }),
   }),
   database: z.object({
     ledgerPath: z.string().default(join(process.cwd(), 'data', 'ledger.db')),
@@ -76,10 +72,6 @@ class ConfigManager {
         coinmarketcap: {
           apiKey: '',
         },
-        anthropic: {
-          apiKey: '',
-          model: 'claude-haiku-4-5',
-        },
       },
     };
 
@@ -102,20 +94,6 @@ class ConfigManager {
             config.api?.coinmarketcap?.apiKey ||
             defaultConfig.api?.coinmarketcap?.apiKey ||
             '',
-        },
-        anthropic: {
-          ...defaultConfig.api?.anthropic,
-          ...config.api?.anthropic,
-          // Environment variables override config file
-          apiKey:
-            process.env.ANTHROPIC_API_KEY ||
-            config.api?.anthropic?.apiKey ||
-            defaultConfig.api?.anthropic?.apiKey ||
-            '',
-          model:
-            config.api?.anthropic?.model ||
-            defaultConfig.api?.anthropic?.model ||
-            'claude-haiku-4-5',
         },
       },
     };
@@ -161,7 +139,7 @@ class ConfigManager {
   isConfigured(): boolean {
     try {
       const config = this.get();
-      return !!(config.api.coinmarketcap.apiKey && config.api.anthropic.apiKey);
+      return !!config.api.coinmarketcap.apiKey;
     } catch {
       return false;
     }
@@ -191,10 +169,6 @@ class ConfigManager {
       this.set('api', {
         coinmarketcap: {
           apiKey: process.env.CMC_API_KEY || '',
-        },
-        anthropic: {
-          apiKey: process.env.ANTHROPIC_API_KEY || '',
-          model: 'claude-haiku-4-5',
         },
       });
     }

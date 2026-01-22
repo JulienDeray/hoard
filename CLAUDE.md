@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Hoard** is a personal CFO platform — not just tracking, but decision support. It's a TypeScript-based web application for multi-asset wealth management with natural language queries powered by Claude AI.
+**Hoard** is a personal CFO platform — not just tracking, but decision support. It's a TypeScript-based web application for multi-asset wealth management.
 
 ### Vision
 
@@ -39,7 +39,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **API:** Fastify REST API
 - **Web UI:** React 19 + Vite 7 (in `/web/`)
 - **APIs:**
-  - Anthropic Claude API (natural language processing)
   - CoinMarketCap API (crypto price data)
 - **Key Dependencies:** axios, zod, date-fns
 
@@ -69,9 +68,7 @@ src/
 │   ├── allocation-target.ts        # Pure service for allocation targets
 │   ├── allocation.ts               # Allocation calculations & comparisons
 │   ├── portfolio.ts                # Portfolio value calculations
-│   ├── coinmarketcap.ts            # CoinMarketCap API client (rate-limited)
-│   ├── claude.ts                   # Claude API with tool definitions
-│   └── query-processor.ts          # Tool executor for Claude
+│   └── coinmarketcap.ts            # CoinMarketCap API client (rate-limited)
 ├── errors/
 │   └── index.ts                    # TypeScript service error classes
 ├── models/
@@ -235,16 +232,6 @@ Services return typed errors instead of throwing, making them composable and tes
 - Methods: `getCurrentPrice()`, `getHistoricalPrice()`, `backfillHistoricalRates()`
 - Handles rate limiting for free tier (~333 calls/day)
 
-**ClaudeService** - AI query processing
-- Tool calling with 4 tools: get_holdings, calculate_portfolio_value, get_historical_price, list_snapshots
-- System prompt defines assistant role and capabilities
-- Handles tool use loop until final text response
-
-**QueryProcessor** - Tool execution coordinator
-- Executes tools requested by Claude
-- Formats database results for Claude
-- Bridges AI service with data layer
-
 ## Error Handling System
 
 ### Service Errors (`src/errors/index.ts`)
@@ -328,7 +315,7 @@ Uses Vitest with a testing pyramid approach:
 - Test helpers: `tests/helpers/`
 
 **Mocking:**
-- External APIs (CoinMarketCap, Claude) are always mocked
+- External APIs (CoinMarketCap) are always mocked
 - Database tests use in-memory SQLite (`:memory:`)
 
 ## Important Implementation Details
@@ -394,12 +381,6 @@ European locale formatting via `src/utils/formatters.ts`:
 3. Implement pure functions that return errors instead of throwing
 4. Add corresponding API endpoint or integrate with existing endpoints
 
-### Adding a New Claude Tool
-1. Add tool definition to `TOOL_DEFINITIONS` in `services/claude.ts`
-2. Add tool executor case in `QueryProcessor.processQuery()`
-3. Implement tool logic using repositories
-4. Return structured data (JSON serializable)
-
 ## Code Conventions
 
 - Use ESLint and Prettier (configs in repo root)
@@ -422,11 +403,9 @@ European locale formatting via `src/utils/formatters.ts`:
 - Verify API key in `.env` or config file
 - Check key is passed to `CoinMarketCapService` constructor
 
-**Claude API errors:**
-- Verify ANTHROPIC_API_KEY is set
-- Check model name is valid (currently using `claude-3-5-sonnet-20241022`)
-
 ## Technical Documentation
+
+**IMPORTANT:** Local documentation in the `docs/` folder must be kept up to date at all times. When making changes to the codebase that affect architecture, APIs, domain model, or developer workflows, update the corresponding documentation files immediately.
 
 Detailed technical documentation is in the `docs/` folder:
 
@@ -437,7 +416,7 @@ Detailed technical documentation is in the `docs/` folder:
 | [Architecture](docs/03-architecture.md) | System design, database architecture, service layer, data flows |
 | [Domain Model](docs/04-domain-model.md) | Entities, relationships, schema versioning (v1-v7) |
 | [Developer Guide](docs/05-developer-guide.md) | Adding features, ESM requirements, code conventions, testing |
-| [API Reference](docs/06-api-reference.md) | Service interfaces, repository methods, error codes, Claude tools |
+| [API Reference](docs/06-api-reference.md) | Service interfaces, repository methods, error codes |
 | [Operations](docs/07-operations.md) | Migrations, backups, rate limiting, troubleshooting |
 
 ## External Documentation

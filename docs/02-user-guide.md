@@ -1,572 +1,605 @@
 # User Guide
 
-Complete reference for using Hoard's command-line interface.
+Complete reference for using Hoard's REST API and Web UI.
 
 ## Table of Contents
 
-1. [CLI Overview](#cli-overview)
-2. [Snapshot Management](#snapshot-management)
-3. [Portfolio Analytics](#portfolio-analytics)
-4. [Allocation Targets](#allocation-targets)
-5. [Natural Language Queries](#natural-language-queries)
-6. [Environment Management](#environment-management)
-7. [Database Migrations](#database-migrations)
-8. [Data Import](#data-import)
+1. [Overview](#overview)
+2. [Running the Application](#running-the-application)
+3. [REST API Reference](#rest-api-reference)
+4. [Web UI](#web-ui)
+5. [Common Workflows](#common-workflows)
 
 ---
 
-## CLI Overview
+## Overview
 
-### Basic Usage
+Hoard provides two interfaces for managing your portfolio:
 
-```bash
-npm run dev [command] [subcommand] [options]
-```
+1. **REST API** - Fastify-based JSON API running on port 3001
+2. **Web UI** - React-based dashboard running on port 5173
 
-### Global Options
-
-| Option | Description |
-|--------|-------------|
-| `--env <environment>` | Use dev or prod database (default: dev) |
-| `--help` | Show help for any command |
-| `--version` | Show version number |
-
-### Available Commands
-
-| Command | Description |
-|---------|-------------|
-| `snapshot` | Manage portfolio snapshots |
-| `portfolio` | View portfolio analytics |
-| `allocation` | Manage allocation targets |
-| `query` | Natural language queries |
-| `env` | Environment management |
-| `migrate` | Database migrations |
+Both interfaces interact with the same underlying data.
 
 ---
 
-## Snapshot Management
+## Running the Application
 
-Snapshots capture your portfolio at a point in time. Record monthly snapshots to track your wealth over time.
-
-### Add a Snapshot
+### Start the API Server
 
 ```bash
-npm run dev snapshot add
+# Development mode (uses data/dev/ databases)
+npm run dev:api:dev
+
+# Production mode (uses data/prod/ databases)
+npm run dev:api:prod
 ```
 
-Interactive prompts guide you through:
+The API server runs on `http://localhost:3001`.
 
-1. **Date**: Enter snapshot date (YYYY-MM-DD format)
-2. **Notes**: Optional description
-3. **Holdings**: Enter each asset symbol and amount
-4. **Liabilities**: Enter outstanding loan/mortgage balances
-
-**Example session:**
-
-```
-◇  Snapshot date (YYYY-MM-DD):
-│  2025-01-22
-
-◇  Add a note for this snapshot?
-│  Monthly review
-
-◇  Enter asset symbol (or 'done' to finish):
-│  BTC
-
-◇  Amount of BTC:
-│  0.5
-
-◇  Enter asset symbol (or 'done' to finish):
-│  ETH
-
-◇  Amount of ETH:
-│  5.0
-
-◇  Enter asset symbol (or 'done' to finish):
-│  done
-
-✓ Snapshot created for 2025-01-22 with 2 holdings
-```
-
-**Asset Discovery:**
-
-When you enter an unknown asset symbol, Hoard searches CoinMarketCap:
-
-```
-◇  Asset 'DOGE' not found locally. Search CoinMarketCap?
-│  Yes
-
-◇  Found: Dogecoin (DOGE)
-│  Add to your assets? Yes
-
-✓ Asset added: Dogecoin (DOGE)
-```
-
-### List Snapshots
+### Start the Web UI
 
 ```bash
-npm run dev snapshot list
+npm run dev:web
 ```
 
-**Options:**
+The web UI runs on `http://localhost:5173`.
 
-| Option | Description |
-|--------|-------------|
-| `--assets <symbols>` | Filter to specific assets (comma-separated) |
-| `--last <n>` | Show only the last n snapshots |
-
-**Examples:**
+### Run Both Together
 
 ```bash
-# List all snapshots
-npm run dev snapshot list
-
-# Show only BTC and ETH columns
-npm run dev snapshot list --assets BTC,ETH
-
-# Show last 3 snapshots
-npm run dev snapshot list --last 3
-
-# Combine filters
-npm run dev snapshot list --assets BTC --last 5
-```
-
-**Output:**
-
-```
-Snapshots (12 total, showing last 3)
-
-Date         Notes              BTC        ETH        Total EUR
-─────────────────────────────────────────────────────────────────
-2025-01-22   Monthly review     0.50       5.00       €36,250
-2024-12-22   Year end           0.45       4.50       €32,100
-2024-11-22   Post-rebalance     0.40       5.00       €29,800
-```
-
-### View Snapshot Details
-
-```bash
-npm run dev snapshot view <date>
-```
-
-**Example:**
-
-```bash
-npm run dev snapshot view 2025-01-22
-```
-
-**Output:**
-
-```
-Snapshot: 2025-01-22
-Notes: Monthly review
-
-Holdings:
-  Symbol    Amount          Value EUR      % of Total
-  ──────────────────────────────────────────────────
-  BTC       0.50000000      €22,500.00     62.1%
-  ETH       5.00000000      €13,750.00     37.9%
-
-  Total Assets: €36,250.00
-
-Liabilities:
-  Name              Type        Outstanding
-  ────────────────────────────────────────
-  House Mortgage    MORTGAGE    €285,000.00
-
-  Total Liabilities: €285,000.00
-
-Net Worth: -€248,750.00
-```
-
-### Delete a Snapshot
-
-```bash
-npm run dev snapshot delete <date>
-```
-
-Delete entire snapshot:
-
-```bash
-npm run dev snapshot delete 2025-01-22
-```
-
-Delete specific holding from snapshot:
-
-```bash
-npm run dev snapshot delete 2025-01-22 BTC
-```
-
-**Confirmation required:**
-
-```
-◇  Delete snapshot for 2025-01-22 with 2 holdings?
-│  Yes
-
-✓ Deleted snapshot for 2025-01-22
+npm run dev:all
 ```
 
 ---
 
-## Portfolio Analytics
+## REST API Reference
 
-### Portfolio Summary
+All API endpoints are prefixed with `/api`.
 
-```bash
-npm run dev portfolio summary
-```
-
-Shows current portfolio value with breakdown:
+### Health Check
 
 ```
-Portfolio Summary (2025-01-22)
+GET /api/health
+```
 
-Holdings:
-  Asset     Amount          Price EUR      Value EUR      Allocation
-  ─────────────────────────────────────────────────────────────────
-  BTC       0.50000000      €45,000.00     €22,500.00     62.1%
-  ETH       5.00000000      €2,750.00      €13,750.00     37.9%
+Returns `{ "status": "ok" }` if the server is running.
 
-Total Portfolio Value: €36,250.00
-Currency: EUR
+---
 
-Prices as of: 2025-01-22 14:30:00
+### Snapshots
+
+Snapshots capture your portfolio at a point in time.
+
+#### List Snapshots
+
+```
+GET /api/snapshots
+```
+
+**Query Parameters:**
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `last` | number | Return only the last N snapshots |
+
+**Response:**
+```json
+{
+  "snapshots": [
+    {
+      "id": 1,
+      "date": "2025-01-22",
+      "notes": "Monthly review",
+      "total_assets_eur": 36250.00,
+      "total_liabilities_eur": 285000.00,
+      "net_worth_eur": -248750.00,
+      "created_at": "2025-01-22T10:30:00Z"
+    }
+  ],
+  "count": 1
+}
+```
+
+#### Get Previous Snapshot Data
+
+```
+GET /api/snapshots/previous
+```
+
+Returns the most recent snapshot with all holdings, useful for pre-filling forms.
+
+#### Get Snapshot by Date
+
+```
+GET /api/snapshots/:date
+```
+
+**Parameters:**
+- `date` - Snapshot date in YYYY-MM-DD format
+
+**Response:**
+```json
+{
+  "snapshot": {
+    "id": 1,
+    "date": "2025-01-22",
+    "notes": "Monthly review"
+  },
+  "holdings": [
+    {
+      "id": 1,
+      "asset_symbol": "BTC",
+      "asset_name": "Bitcoin",
+      "amount": 0.5,
+      "current_price_eur": 45000,
+      "current_value_eur": 22500,
+      "current_percentage": 62.1
+    }
+  ],
+  "liability_balances": [...],
+  "total_assets_eur": 36250.00,
+  "total_liabilities_eur": 285000.00,
+  "net_worth_eur": -248750.00
+}
+```
+
+#### Create Snapshot
+
+```
+POST /api/snapshots
+```
+
+**Body:**
+```json
+{
+  "date": "2025-01-22",
+  "notes": "Monthly review"
+}
+```
+
+#### Delete Snapshot
+
+```
+DELETE /api/snapshots/:date
 ```
 
 ---
 
-## Allocation Targets
+### Holdings
 
-Set target allocations and compare your current portfolio against them.
+Holdings are positions within a snapshot.
 
-### Set Allocation Targets
-
-```bash
-npm run dev allocation set
-```
-
-Interactive prompt to define targets:
+#### Add Holding to Snapshot
 
 ```
-◇  Target type:
-│  ● Asset (specific assets like BTC, ETH)
-│  ○ Asset Class (categories like CRYPTO, STOCK)
-
-◇  Select target type:
-│  Asset
-
-◇  Enter asset symbol:
-│  BTC
-
-◇  Target percentage for BTC:
-│  50
-
-◇  Tolerance percentage (default 2%):
-│  2
-
-◇  Add another target?
-│  Yes
-
-◇  Enter asset symbol:
-│  ETH
-
-◇  Target percentage for ETH:
-│  50
-
-◇  Add another target?
-│  No
-
-✓ Allocation targets saved (sum: 100%)
+POST /api/snapshots/:date/holdings
 ```
 
-**Target Types:**
-
-- **Asset**: Target specific assets (e.g., BTC: 50%, ETH: 50%)
-- **Asset Class**: Target categories (e.g., CRYPTO: 60%, STOCK: 30%, FIAT: 10%)
-
-**Special target: OTHER**
-
-Use `OTHER` to capture all assets not explicitly targeted:
-
-```
-Targets:
-  BTC: 40%
-  ETH: 30%
-  OTHER: 30%  ← captures SOL, DOGE, etc.
+**Body:**
+```json
+{
+  "symbol": "BTC",
+  "amount": 0.5,
+  "price_eur": 45000
+}
 ```
 
-### View Allocation Targets
+Note: `price_eur` is optional. If provided, it saves a historical rate for the snapshot date.
 
-```bash
-npm run dev allocation view
-```
-
-**Output:**
+#### Update Holding
 
 ```
-Allocation Targets
-
-  Target          Type     Percentage   Tolerance
-  ────────────────────────────────────────────────
-  BTC             ASSET    50.0%        ±2.0%
-  ETH             ASSET    50.0%        ±2.0%
-
-  Total: 100.0%
+PUT /api/snapshots/:date/holdings/:assetId
 ```
 
-### Compare Current vs Target
-
-```bash
-npm run dev allocation compare
+**Body:**
+```json
+{
+  "amount": 0.6
+}
 ```
 
-**Options:**
-
-| Option | Description |
-|--------|-------------|
-| `-d, --date <date>` | Compare for a specific snapshot date |
-
-**Example:**
-
-```bash
-npm run dev allocation compare
-npm run dev allocation compare -d 2024-12-22
-```
-
-**Output:**
+#### Delete Holding
 
 ```
-Allocation Comparison (2025-01-22)
-
-  Target    Current    Target     Diff       Status
-  ──────────────────────────────────────────────────
-  BTC       62.1%      50.0%      +12.1%     ⚠ OVERWEIGHT
-  ETH       37.9%      50.0%      -12.1%     ⚠ UNDERWEIGHT
-
-Portfolio Status: OUT OF BALANCE
-
-Rebalancing Suggestions:
-  • SELL €4,387.50 of BTC
-  • BUY €4,387.50 of ETH
+DELETE /api/snapshots/:date/holdings/:assetId
 ```
-
-**Status indicators:**
-
-- ✓ OK: Within tolerance
-- ⚠ OVERWEIGHT: Above target + tolerance
-- ⚠ UNDERWEIGHT: Below target - tolerance
-
-### Clear Allocation Targets
-
-```bash
-npm run dev allocation clear
-```
-
-Removes all allocation targets after confirmation.
 
 ---
 
-## Natural Language Queries
+### Liability Balances
 
-Ask questions about your portfolio in plain English.
+Track outstanding amounts on liabilities per snapshot.
 
-### Basic Usage
+#### Add Liability Balance
 
-```bash
-npm run dev query "your question here"
+```
+POST /api/snapshots/:date/liabilities
 ```
 
-### Example Queries
-
-**Portfolio value:**
-
-```bash
-npm run dev query "What is my total portfolio worth?"
-npm run dev query "How much is my portfolio worth in euros?"
+**Body:**
+```json
+{
+  "liability_id": 1,
+  "outstanding_amount": 280000
+}
 ```
 
-**Specific assets:**
+#### Update Liability Balance
 
-```bash
-npm run dev query "How much Bitcoin do I have?"
-npm run dev query "What's my ETH position worth?"
-npm run dev query "Show me all my crypto holdings"
+```
+PUT /api/snapshots/:date/liabilities/:liabilityId
 ```
 
-**Historical data:**
-
-```bash
-npm run dev query "What was my portfolio worth on January 1st?"
-npm run dev query "How has my BTC holdings changed over the last 3 months?"
+**Body:**
+```json
+{
+  "outstanding_amount": 275000
+}
 ```
 
-**Allocation and rebalancing:**
+#### Delete Liability Balance
 
-```bash
-npm run dev query "Am I on target with my allocation?"
-npm run dev query "How should I rebalance my portfolio?"
-npm run dev query "What should I buy or sell to match my targets?"
 ```
-
-**Comparisons:**
-
-```bash
-npm run dev query "Compare my current holdings to last month"
-npm run dev query "How much has my portfolio grown this year?"
+DELETE /api/snapshots/:date/liabilities/:liabilityId
 ```
-
-### Available Claude Tools
-
-Claude uses these tools to answer your questions:
-
-| Tool | Description |
-|------|-------------|
-| `get_holdings` | Retrieve holdings for a snapshot date |
-| `calculate_portfolio_value` | Calculate total value with prices |
-| `get_historical_price` | Get price for a specific date |
-| `list_snapshots` | List all available snapshots |
-| `suggest_rebalancing` | Get rebalancing suggestions |
 
 ---
 
-## Environment Management
+### Assets
 
-Hoard supports separate dev and prod databases.
+Assets are things you can hold (crypto, stocks, fiat, etc.).
 
-### Check Current Environment
-
-```bash
-npm run dev env
-```
-
-**Output:**
+#### List Assets
 
 ```
-Environment: dev
-  Database path: /path/to/wealth-management/data/dev
-  Ledger DB: ✓ exists (schema v7)
-  Rates DB: ✓ exists
-  ✓ ANTHROPIC_API_KEY configured
-  ✓ COINMARKETCAP_API_KEY configured
+GET /api/assets
 ```
 
-### Switch Environments
-
-Use the `--env` flag with any command:
-
-```bash
-# Development (default)
-npm run dev snapshot list
-
-# Production
-npm run dev -- --env prod snapshot list
+**Response:**
+```json
+{
+  "assets": [
+    {
+      "id": 1,
+      "symbol": "BTC",
+      "name": "Bitcoin",
+      "asset_class": "CRYPTO",
+      "valuation_source": "CMC",
+      "is_active": true
+    }
+  ]
+}
 ```
 
-### Seed Dev from Prod
+#### Search Assets
 
-Copy production data to development for testing:
-
-```bash
-npm run dev env seed
+```
+GET /api/assets/search?q=bit
 ```
 
-This copies:
-- All snapshots and holdings
-- All assets and liabilities
-- Allocation targets
-
-**Note:** Rates data is not copied (fetched fresh from API).
+**Query Parameters:**
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `q` | string | Search query |
+| `limit` | number | Max results (default: 10) |
 
 ---
 
-## Database Migrations
+### Portfolio
 
-Update database schema when upgrading Hoard.
+Portfolio analytics and value calculations.
 
-### Check Migration Status
-
-```bash
-npm run dev migrate --status
-```
-
-**Output:**
+#### Get Portfolio Summary
 
 ```
-Schema Version Information:
-  Current version: 7
-
-Applied Migrations:
-  ✓ v1: Initial schema (2025-12-13)
-  ✓ v2: Allocation targets (2025-12-28)
-  ...
-  ✓ v7: Add asset metadata (2026-01-15)
-
-Pending Migrations:
-  (none)
+GET /api/portfolio/summary
 ```
 
-### Run Migrations
+**Query Parameters:**
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `date` | string | Snapshot date (YYYY-MM-DD), defaults to latest |
 
-```bash
-# Preview changes (recommended first)
-npm run dev migrate --dry-run
-
-# Apply migrations
-npm run dev migrate
+**Response:**
+```json
+{
+  "date": "2025-01-22",
+  "holdings": [
+    {
+      "asset_symbol": "BTC",
+      "asset_name": "Bitcoin",
+      "amount": 0.5,
+      "current_price_eur": 45000,
+      "current_value_eur": 22500,
+      "current_percentage": 62.1
+    }
+  ],
+  "total_assets_eur": 36250.00,
+  "total_liabilities_eur": 285000.00,
+  "net_worth_eur": -248750.00,
+  "real_estate": {
+    "total_value": 0,
+    "total_equity": 0,
+    "properties": []
+  }
+}
 ```
-
-### Production Migrations
-
-```bash
-# Always dry-run first on production
-npm run dev -- --env prod migrate --dry-run
-
-# Then apply
-npm run dev -- --env prod migrate
-```
-
-### Run Backfill Operations
-
-```bash
-npm run dev migrate --backfill
-```
-
-Backfill recalculates cached values after schema changes.
 
 ---
 
-## Data Import
+### Allocation Targets
 
-### Import from Koinly
+Set and compare portfolio allocation targets.
 
-Import historical snapshots from Koinly CSV exports.
+#### List Targets
 
-```bash
-npm run import-koinly
+```
+GET /api/allocations/targets
 ```
 
-**Options:**
-
-| Option | Description |
-|--------|-------------|
-| `--dry-run` | Preview without importing |
-| `--force` | Overwrite existing snapshots |
-| `--dir <path>` | Custom directory for CSV files |
-
-**Example:**
-
-```bash
-# Preview import
-npm run import-koinly -- --dry-run
-
-# Import with overwrite
-npm run import-koinly -- --force
-
-# Import from custom directory
-npm run import-koinly -- --dir ~/Downloads/koinly
+**Response:**
+```json
+{
+  "targets": [
+    {
+      "id": 1,
+      "target_type": "ASSET",
+      "target_key": "BTC",
+      "target_percentage": 50,
+      "tolerance_pct": 2
+    }
+  ]
+}
 ```
 
-See [Koinly Import Guide](./koinly-import.md) for detailed instructions.
+#### Compare Allocation
+
+```
+GET /api/allocations/compare
+```
+
+**Query Parameters:**
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `date` | string | Snapshot date (YYYY-MM-DD), defaults to latest |
+
+**Response:**
+```json
+{
+  "date": "2025-01-22",
+  "total_value": 36250.00,
+  "allocations": [
+    {
+      "target_key": "BTC",
+      "display_name": "Bitcoin",
+      "current_percentage": 62.1,
+      "target_percentage": 50,
+      "difference_percentage": 12.1,
+      "is_within_tolerance": false
+    }
+  ],
+  "has_targets": true
+}
+```
+
+#### Set Targets
+
+```
+PUT /api/allocations/targets
+```
+
+**Body:**
+```json
+{
+  "targets": [
+    {
+      "target_type": "ASSET",
+      "target_key": "BTC",
+      "target_percentage": 50,
+      "tolerance_pct": 2
+    },
+    {
+      "target_type": "ASSET",
+      "target_key": "ETH",
+      "target_percentage": 50,
+      "tolerance_pct": 2
+    }
+  ]
+}
+```
+
+#### Clear Targets
+
+```
+DELETE /api/allocations/targets
+```
+
+---
+
+### Prices
+
+Get and manage cryptocurrency prices.
+
+#### Get Current Prices
+
+```
+GET /api/prices/current?symbols=BTC,ETH
+```
+
+**Response:**
+```json
+{
+  "prices": [
+    { "symbol": "BTC", "price": 45000, "currency": "EUR" },
+    { "symbol": "ETH", "price": 2750, "currency": "EUR" }
+  ]
+}
+```
+
+#### Refresh Prices
+
+```
+POST /api/prices/refresh
+```
+
+**Body:**
+```json
+{
+  "symbols": ["BTC", "ETH"]
+}
+```
+
+Forces a fresh fetch from CoinMarketCap, bypassing the cache.
+
+#### Override Price
+
+```
+POST /api/prices/override
+```
+
+**Body:**
+```json
+{
+  "symbol": "BTC",
+  "price": 45000,
+  "date": "2025-01-22"
+}
+```
+
+Manually set a historical price for an asset on a specific date.
+
+---
+
+### Liabilities
+
+Manage loans, mortgages, and other liabilities.
+
+#### List Liabilities
+
+```
+GET /api/liabilities
+```
+
+**Query Parameters:**
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `active_only` | boolean | Only return active liabilities (default: true) |
+
+#### Get Liability by ID
+
+```
+GET /api/liabilities/:id
+```
+
+#### Create Liability
+
+```
+POST /api/liabilities
+```
+
+**Body:**
+```json
+{
+  "name": "House Mortgage",
+  "liability_type": "MORTGAGE",
+  "original_amount": 300000,
+  "interest_rate": 2.5,
+  "start_date": "2020-01-15",
+  "term_months": 300,
+  "linked_asset_id": 5
+}
+```
+
+**Liability Types:** `LOAN`, `MORTGAGE`, `CREDIT_LINE`
+
+#### Update Liability
+
+```
+PUT /api/liabilities/:id
+```
+
+#### Delete Liability
+
+```
+DELETE /api/liabilities/:id
+```
+
+---
+
+### Properties
+
+Manage real estate properties.
+
+#### List Properties
+
+```
+GET /api/properties
+```
+
+#### Get Property by ID
+
+```
+GET /api/properties/:id
+```
+
+#### Create Property
+
+```
+POST /api/properties
+```
+
+**Body:**
+```json
+{
+  "name": "Main Residence",
+  "property_type": "PRIMARY_RESIDENCE",
+  "current_value": 450000,
+  "address": "123 Main St"
+}
+```
+
+**Property Types:** `PRIMARY_RESIDENCE`, `RENTAL`, `VACATION`
+
+#### Update Property
+
+```
+PUT /api/properties/:id
+```
+
+#### Update Property Value
+
+```
+PUT /api/properties/:id/value
+```
+
+**Body:**
+```json
+{
+  "current_value": 475000
+}
+```
+
+---
+
+## Web UI
+
+The web UI provides a dashboard for managing your portfolio.
+
+### Features
+
+- **Dashboard**: Overview of net worth and allocation
+- **Snapshots**: Create and manage monthly snapshots
+- **Holdings**: Add, edit, and remove asset holdings
+- **Allocation**: Set targets and track drift
+- **Properties**: Manage real estate assets
+- **Liabilities**: Track loans and mortgages
+
+### Accessing the Web UI
+
+1. Start the API server: `npm run dev:api:dev`
+2. Start the web UI: `npm run dev:web`
+3. Open `http://localhost:5173` in your browser
 
 ---
 
@@ -574,47 +607,48 @@ See [Koinly Import Guide](./koinly-import.md) for detailed instructions.
 
 ### Monthly Portfolio Review
 
+1. Open the web UI or use the API
+2. Create a new snapshot for the current month
+3. Enter all your current holdings
+4. Enter liability balances
+5. Review allocation vs targets
+6. Note any rebalancing needed
+
+### API Example: Create Monthly Snapshot
+
 ```bash
-# 1. Add new snapshot
-npm run dev snapshot add
+# Create snapshot
+curl -X POST http://localhost:3001/api/snapshots \
+  -H "Content-Type: application/json" \
+  -d '{"date": "2025-01-22", "notes": "January review"}'
 
-# 2. View portfolio summary
-npm run dev portfolio summary
+# Add holdings
+curl -X POST http://localhost:3001/api/snapshots/2025-01-22/holdings \
+  -H "Content-Type: application/json" \
+  -d '{"symbol": "BTC", "amount": 0.5}'
 
-# 3. Check allocation drift
-npm run dev allocation compare
+curl -X POST http://localhost:3001/api/snapshots/2025-01-22/holdings \
+  -H "Content-Type: application/json" \
+  -d '{"symbol": "ETH", "amount": 5.0}'
 
-# 4. Ask specific questions
-npm run dev query "How has my portfolio changed since last month?"
+# Get portfolio summary
+curl http://localhost:3001/api/portfolio/summary?date=2025-01-22
 ```
 
-### Setting Up a New Portfolio
+### Setting Up Allocation Targets
 
 ```bash
-# 1. Initialize databases
-npm run init
+curl -X PUT http://localhost:3001/api/allocations/targets \
+  -H "Content-Type: application/json" \
+  -d '{
+    "targets": [
+      {"target_type": "ASSET", "target_key": "BTC", "target_percentage": 50, "tolerance_pct": 2},
+      {"target_type": "ASSET", "target_key": "ETH", "target_percentage": 50, "tolerance_pct": 2}
+    ]
+  }'
 
-# 2. Set your allocation targets
-npm run dev allocation set
-
-# 3. Add your current holdings
-npm run dev snapshot add
-
-# 4. Compare to targets
-npm run dev allocation compare
-```
-
-### Analyzing Historical Performance
-
-```bash
-# List all snapshots
-npm run dev snapshot list
-
-# View specific snapshot
-npm run dev snapshot view 2024-01-15
-
-# Ask Claude for analysis
-npm run dev query "What was my best performing month this year?"
+# Compare current allocation
+curl http://localhost:3001/api/allocations/compare
 ```
 
 ---

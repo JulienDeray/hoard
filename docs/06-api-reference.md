@@ -1,13 +1,12 @@
 # API Reference
 
-Detailed reference for Hoard's service layer, repositories, errors, and Claude tools.
+Detailed reference for Hoard's service layer, repositories, and errors.
 
 ## Table of Contents
 
 1. [Service Interfaces](#service-interfaces)
 2. [Repository Methods](#repository-methods)
 3. [Error Classes & Codes](#error-classes--codes)
-4. [Claude Tool Definitions](#claude-tool-definitions)
 
 ---
 
@@ -259,56 +258,6 @@ constructor(apiKey: string)
 
 ---
 
-### ClaudeService
-
-AI-powered natural language processing.
-
-**Constructor:**
-
-```typescript
-constructor(
-  apiKey: string,
-  model?: string = 'claude-haiku-4-5'
-)
-```
-
-#### Methods
-
-| Method | Parameters | Returns | Description |
-|--------|------------|---------|-------------|
-| `processQuery` | `userQuery: string, toolExecutor: ToolExecutor` | `Promise<string>` | Process query with tool use |
-
-**Process:**
-1. Send query to Claude with available tools
-2. Loop: execute requested tools → add results → get response
-3. Return final text response
-
----
-
-### QueryProcessor
-
-Coordinates Claude with data layer.
-
-**Constructor:**
-
-```typescript
-constructor(
-  claudeService: ClaudeService,
-  portfolioService: PortfolioService,
-  ledgerRepo: LedgerRepository,
-  ratesRepo: RatesRepository,
-  allocationService: AllocationService
-)
-```
-
-#### Methods
-
-| Method | Parameters | Returns | Description |
-|--------|------------|---------|-------------|
-| `processQuery` | `userQuery: string` | `Promise<string>` | End-to-end query processing |
-
----
-
 ## Repository Methods
 
 ### LedgerRepository
@@ -487,159 +436,6 @@ try {
   } else if (error instanceof ServiceError) {
     console.log(`Error [${error.code}]: ${error.message}`);
   }
-}
-```
-
----
-
-## Claude Tool Definitions
-
-Five tools are available to Claude for data access.
-
-### get_holdings
-
-**Description:** Retrieve holdings for a snapshot date.
-
-**Input:**
-
-```typescript
-{
-  date?: string  // YYYY-MM-DD, omit for latest
-}
-```
-
-**Output:**
-
-```typescript
-{
-  date: string;
-  holdings: Array<{
-    asset: string;
-    name: string;
-    amount: number;
-  }>;
-  error?: string;
-}
-```
-
----
-
-### calculate_portfolio_value
-
-**Description:** Calculate total portfolio value in EUR.
-
-**Input:**
-
-```typescript
-{
-  date?: string  // YYYY-MM-DD, omit for current
-}
-```
-
-**Output:**
-
-```typescript
-{
-  date: string;
-  total_value: number;
-  currency: string;
-  breakdown: Array<{
-    asset: string;
-    name: string;
-    amount: number;
-    price?: number;
-    value?: number;
-  }>;
-  error?: string;
-}
-```
-
----
-
-### get_historical_price
-
-**Description:** Get price for an asset on a specific date.
-
-**Input:**
-
-```typescript
-{
-  symbol: string;  // Required
-  date: string;    // Required, YYYY-MM-DD
-}
-```
-
-**Output:**
-
-```typescript
-{
-  asset: string;
-  date: string;
-  price: number;
-  currency: string;
-  error?: string;
-}
-```
-
----
-
-### list_snapshots
-
-**Description:** List all available snapshots.
-
-**Input:**
-
-```typescript
-{}  // No parameters
-```
-
-**Output:**
-
-```typescript
-{
-  count: number;
-  snapshots: Array<{
-    date: string;
-    notes?: string;
-    created_at: string;
-  }>;
-  error?: string;
-}
-```
-
----
-
-### suggest_rebalancing
-
-**Description:** Get rebalancing suggestions based on targets.
-
-**Input:**
-
-```typescript
-{
-  date?: string;      // YYYY-MM-DD, omit for current
-  tolerance?: number; // Default: 2
-}
-```
-
-**Output:**
-
-```typescript
-{
-  date: string;
-  total_value: number;
-  currency: string;
-  is_balanced: boolean;
-  actions: Array<{
-    asset: string;
-    name: string;
-    action: 'buy' | 'sell' | 'hold';
-    amount_eur: number;
-    current_percentage: number;
-    target_percentage: number;
-    difference_percentage: number;
-  }>;
-  error?: string;
 }
 ```
 

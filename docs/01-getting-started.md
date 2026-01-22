@@ -59,22 +59,19 @@ cd wealth-management
 npm install
 ```
 
-### Verify Installation
+### Build the Project
 
 ```bash
-# Check that the CLI runs
-npm run dev -- --help
+npm run build
 ```
-
-You should see the available commands listed.
 
 ---
 
 ## API Key Setup
 
-Hoard integrates with two external APIs:
+Hoard integrates with the CoinMarketCap API for cryptocurrency price data.
 
-### 1. CoinMarketCap API (Cryptocurrency Prices)
+### CoinMarketCap API (Cryptocurrency Prices)
 
 CoinMarketCap provides real-time and historical cryptocurrency price data.
 
@@ -90,22 +87,11 @@ CoinMarketCap provides real-time and historical cryptocurrency price data.
 - Hoard uses conservative rate limiting (1 call/second max)
 - Prices are cached for 5 minutes
 
-### 2. Anthropic Claude API (Natural Language Queries)
-
-Claude powers the natural language query feature, allowing you to ask questions about your portfolio in plain English.
-
-**Get an API key:**
-
-1. Visit [https://console.anthropic.com/](https://console.anthropic.com/)
-2. Create an account
-3. Navigate to API Keys in settings
-4. Create a new API key
-
 ---
 
 ## Environment Configuration
 
-### Option 1: Using .env File (Recommended)
+### Using .env File (Recommended)
 
 Create a `.env` file in the project root:
 
@@ -113,7 +99,7 @@ Create a `.env` file in the project root:
 # Copy the example file
 cp .env.example .env
 
-# Edit with your API keys
+# Edit with your API key
 nano .env  # or use your preferred editor
 ```
 
@@ -121,41 +107,18 @@ Contents of `.env`:
 
 ```env
 # CoinMarketCap API Key (required for price data)
-COINMARKETCAP_API_KEY=your_cmc_api_key_here
-
-# Anthropic Claude API Key (required for natural language queries)
-ANTHROPIC_API_KEY=sk-ant-your_key_here
+CMC_API_KEY=your_cmc_api_key_here
 ```
 
-### Option 2: Environment Variables
+### Environment Variables
 
 Set environment variables directly:
 
 ```bash
-export COINMARKETCAP_API_KEY=your_cmc_api_key_here
-export ANTHROPIC_API_KEY=sk-ant-your_key_here
+export CMC_API_KEY=your_cmc_api_key_here
 ```
 
 Add these to your shell profile (`.bashrc`, `.zshrc`, etc.) for persistence.
-
-### Option 3: Configuration File
-
-The init script creates a config file at `~/.config/crypto-tracker/config.json`. You can edit this directly, but `.env` is preferred.
-
-### Verify Configuration
-
-```bash
-npm run dev env
-```
-
-You should see:
-
-```
-Environment: dev
-  Database path: /path/to/wealth-management/data/dev
-  ✓ ANTHROPIC_API_KEY configured
-  ✓ COINMARKETCAP_API_KEY configured
-```
 
 ---
 
@@ -166,131 +129,93 @@ Hoard uses two SQLite databases:
 - **Ledger DB** (`ledger.db`): Your portfolio data (snapshots, holdings, assets, liabilities)
 - **Rates DB** (`rates.db`): Market price data and cache
 
-### Initialize Databases
+### Run Migrations
 
 ```bash
-# Initialize both dev and prod environments
-npm run init
+# Run migrations for development environment
+npm run migrate
 
-# Or initialize only dev
-npm run init:dev
+# Run migrations for production environment
+npm run migrate -- --env=prod
 
-# Or initialize only prod
-npm run init:prod
-```
+# Preview changes before applying
+npm run migrate -- --dry-run
 
-The init script will:
-
-1. Create the `data/dev/` and `data/prod/` directories
-2. Initialize SQLite databases with the current schema
-3. Seed common cryptocurrency assets (BTC, ETH, SOL, etc.)
-4. Create the configuration file
-
-### Run Migrations (if needed)
-
-If you're updating from an older version:
-
-```bash
 # Check current schema version
-npm run dev migrate --status
-
-# Apply pending migrations
-npm run dev migrate
+npm run migrate -- --status
 ```
+
+The migration script will:
+
+1. Create the `data/dev/` or `data/prod/` directories as needed
+2. Initialize SQLite databases with the current schema
+3. Apply any pending migrations
 
 ---
 
 ## Quick Start Guide
 
-Now that everything is set up, let's record your first portfolio snapshot.
+Now that everything is set up, let's start the application.
 
-### 1. Add Your First Snapshot
-
-```bash
-npm run dev snapshot add
-```
-
-You'll be guided through an interactive prompt:
-
-```
-◇  Snapshot date (YYYY-MM-DD):
-│  2025-01-22
-│
-◇  Add a note for this snapshot? (optional)
-│  Monthly portfolio review
-│
-◇  Enter asset symbol (or 'done' to finish):
-│  BTC
-│
-◇  Amount of BTC:
-│  0.5
-│
-◇  Enter asset symbol (or 'done' to finish):
-│  ETH
-│
-◇  Amount of ETH:
-│  5
-│
-◇  Enter asset symbol (or 'done' to finish):
-│  done
-
-✓ Snapshot created for 2025-01-22 with 2 holdings
-```
-
-### 2. View Your Portfolio
+### 1. Start the API Server
 
 ```bash
-npm run dev portfolio summary
+# Development mode (uses data/dev/ databases)
+npm run dev:api:dev
+
+# Production mode (uses data/prod/ databases)
+npm run dev:api:prod
 ```
 
-Output:
+The API server will start on `http://localhost:3001` by default.
 
-```
-Portfolio Summary (2025-01-22)
+### 2. Start the Web UI
 
-Holdings:
-  BTC     0.50000000    €22,500.00   45.0%
-  ETH     5.00000000    €13,750.00   27.5%
-
-Total Value: €36,250.00
-```
-
-### 3. Ask Questions (Natural Language)
+In a new terminal:
 
 ```bash
-npm run dev query "What's my total portfolio worth?"
+npm run dev:web
 ```
+
+The web UI will start on `http://localhost:5173` (or another port if 5173 is in use).
+
+### 3. Or Run Both Together
 
 ```bash
-npm run dev query "How much Bitcoin do I have?"
+npm run dev:all
 ```
 
+This starts both the API server and web UI concurrently.
+
+### 4. Using the API
+
+Once the server is running, you can interact with the REST API:
+
+**List snapshots:**
 ```bash
-npm run dev query "Show me my portfolio breakdown by percentage"
+curl http://localhost:3001/snapshots
 ```
 
-### 4. List Your Snapshots
-
+**Get portfolio value:**
 ```bash
-npm run dev snapshot list
+curl http://localhost:3001/portfolio/value
 ```
 
-```
-Snapshots:
-  2025-01-22  Monthly portfolio review  (2 holdings)
-```
-
-### 5. Set Allocation Targets (Optional)
-
+**Create a snapshot:**
 ```bash
-npm run dev allocation set
+curl -X POST http://localhost:3001/snapshots \
+  -H "Content-Type: application/json" \
+  -d '{"date": "2025-01-22", "notes": "Monthly review"}'
 ```
 
-Follow the prompts to set your target portfolio allocation, then compare:
-
+**Add a holding to a snapshot:**
 ```bash
-npm run dev allocation compare
+curl -X POST http://localhost:3001/snapshots/2025-01-22/holdings \
+  -H "Content-Type: application/json" \
+  -d '{"symbol": "BTC", "amount": 0.5}'
 ```
+
+See the [User Guide](./02-user-guide.md) for the complete API reference.
 
 ---
 
@@ -298,43 +223,36 @@ npm run dev allocation compare
 
 Now that you have Hoard running, explore these features:
 
-### Import Historical Data
+### Use the Web UI
 
-If you have Koinly export files:
+Open `http://localhost:5173` in your browser to:
+- View your portfolio dashboard
+- Add and manage snapshots
+- Track allocation vs targets
+- View historical performance
 
-```bash
-npm run import-koinly
-```
+### Learn the API Endpoints
 
-See [Koinly Import Guide](./koinly-import.md) for details.
-
-### Learn the CLI Commands
-
-```bash
-# Full command reference
-npm run dev -- --help
-
-# Specific command help
-npm run dev snapshot --help
-npm run dev query --help
-npm run dev allocation --help
-```
+See the [User Guide](./02-user-guide.md) for:
+- Complete REST API reference
+- All available endpoints
+- Request/response examples
 
 ### Environment Management
 
-Switch between dev and prod:
+Switch between dev and prod by setting `HOARD_ENV`:
 
 ```bash
-# Dev environment (default)
-npm run dev snapshot list
+# Development (default)
+HOARD_ENV=dev npm run dev:api
 
-# Production environment
-npm run dev -- --env prod snapshot list
+# Production
+HOARD_ENV=prod npm run dev:api
 ```
 
 ### Read the Documentation
 
-- [User Guide](./02-user-guide.md) - Complete CLI reference
+- [User Guide](./02-user-guide.md) - Complete API reference
 - [Architecture](./03-architecture.md) - System design
 - [Domain Model](./04-domain-model.md) - Data structures
 - [Developer Guide](./05-developer-guide.md) - Contributing
@@ -355,10 +273,10 @@ node --version  # Should be v22.19.0
 
 ### API key not working
 
-Verify your keys are set:
+Verify your key is set in `.env`:
 
 ```bash
-npm run dev env
+cat .env | grep CMC_API_KEY
 ```
 
 ### Database errors
@@ -367,7 +285,7 @@ Re-initialize the databases:
 
 ```bash
 rm -rf data/dev data/prod
-npm run init
+npm run migrate
 ```
 
 ### More help

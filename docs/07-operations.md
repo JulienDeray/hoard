@@ -18,7 +18,7 @@ Hoard uses a versioned migration system. Migrations are applied explicitly via C
 ### Check Migration Status
 
 ```bash
-npm run dev migrate --status
+npm run migrate -- --status
 ```
 
 **Output:**
@@ -45,16 +45,16 @@ Pending Migrations:
 **Preview first (recommended):**
 
 ```bash
-npm run dev migrate --dry-run
+npm run migrate -- --dry-run
 ```
 
 **Apply migrations:**
 
 ```bash
-npm run dev migrate
+npm run migrate
 ```
 
-The CLI will:
+The script will:
 1. Show pending migrations
 2. Request confirmation
 3. Create a backup
@@ -65,10 +65,10 @@ The CLI will:
 
 ```bash
 # Always preview first
-npm run dev -- --env prod migrate --dry-run
+npm run migrate -- --env=prod --dry-run
 
 # Then apply
-npm run dev -- --env prod migrate
+npm run migrate -- --env=prod
 ```
 
 ### Run Backfill Operations
@@ -76,7 +76,7 @@ npm run dev -- --env prod migrate
 Backfill operations populate computed values after schema changes:
 
 ```bash
-npm run dev migrate --backfill
+npm run migrate -- --backfill
 ```
 
 Current backfill operations:
@@ -217,8 +217,10 @@ Force a refresh of all prices:
 # Via SQL
 sqlite3 data/dev/rates.db "DELETE FROM rate_cache;"
 
-# Then run a query to trigger refresh
-npm run dev portfolio summary
+# Then use the API to trigger refresh
+curl -X POST http://localhost:3001/api/prices/refresh \
+  -H "Content-Type: application/json" \
+  -d '{"symbols": ["BTC", "ETH"]}'
 ```
 
 ---
@@ -289,40 +291,17 @@ CoinMarketCap API error: Invalid API key
 
 **Solution:**
 
-1. Check configuration:
+1. Check configuration in `.env`:
    ```bash
-   npm run dev env
+   cat .env | grep CMC_API_KEY
    ```
 
 2. Set API key in `.env`:
    ```bash
-   echo "COINMARKETCAP_API_KEY=your_key" >> .env
+   echo "CMC_API_KEY=your_key" >> .env
    ```
 
 3. Get a free key from [coinmarketcap.com/api](https://coinmarketcap.com/api/)
-
----
-
-### Claude API Errors
-
-**Error:**
-```
-401 Authentication error
-```
-
-**Solution:**
-
-1. Check configuration:
-   ```bash
-   npm run dev env
-   ```
-
-2. Set API key:
-   ```bash
-   echo "ANTHROPIC_API_KEY=sk-ant-..." >> .env
-   ```
-
-3. Get key from [console.anthropic.com](https://console.anthropic.com/)
 
 ---
 
@@ -333,16 +312,9 @@ CoinMarketCap API error: Invalid API key
 Invalid date format: 2025/01/22. Use YYYY-MM-DD
 ```
 
-**Solution:** Use ISO 8601 format:
-
-```bash
-# Correct
-npm run dev snapshot view 2025-01-22
-
-# Wrong
-npm run dev snapshot view 2025/01/22
-npm run dev snapshot view "January 22, 2025"
-```
+**Solution:** Use ISO 8601 format (YYYY-MM-DD):
+- Correct: `2025-01-22`
+- Wrong: `2025/01/22`, `January 22, 2025`
 
 ---
 
@@ -351,15 +323,15 @@ npm run dev snapshot view "January 22, 2025"
 **Error:**
 ```
 Database schema version 5 is behind expected version 7.
-Run 'npm run dev migrate' to update the schema.
+Run 'npm run migrate' to update the schema.
 ```
 
 **Solution:**
 
 ```bash
-npm run dev migrate --status    # Check status
-npm run dev migrate --dry-run   # Preview
-npm run dev migrate             # Apply
+npm run migrate -- --status    # Check status
+npm run migrate -- --dry-run   # Preview
+npm run migrate                # Apply
 ```
 
 ---
@@ -400,14 +372,9 @@ No portfolio data found for 2025-01-22
 **Cause:** No snapshot exists for that date.
 
 **Solution:**
-
-```bash
-# List existing snapshots
-npm run dev snapshot list
-
-# Create a new snapshot
-npm run dev snapshot add
-```
+1. Check existing snapshots via `GET /api/snapshots`
+2. Create a new snapshot via `POST /api/snapshots`
+3. Or use the Web UI to manage snapshots
 
 ---
 
@@ -471,11 +438,13 @@ sqlite3 data/dev/rates.db "VACUUM;"
 
 | Task | Command |
 |------|---------|
-| Check migration status | `npm run dev migrate --status` |
-| Preview migrations | `npm run dev migrate --dry-run` |
-| Apply migrations | `npm run dev migrate` |
-| Run backfill | `npm run dev migrate --backfill` |
-| Check environment | `npm run dev env` |
+| Check migration status | `npm run migrate -- --status` |
+| Preview migrations | `npm run migrate -- --dry-run` |
+| Apply migrations | `npm run migrate` |
+| Run backfill | `npm run migrate -- --backfill` |
+| Start API server (dev) | `npm run dev:api:dev` |
+| Start API server (prod) | `npm run dev:api:prod` |
+| Start Web UI | `npm run dev:web` |
 | Clear price cache | `sqlite3 data/dev/rates.db "DELETE FROM rate_cache;"` |
 | Restore backup | `cp backup_file ledger.db` |
 

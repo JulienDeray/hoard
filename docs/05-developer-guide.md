@@ -22,20 +22,24 @@ Instructions for developing new features, understanding the codebase, and follow
 | **Package Manager** | npm |
 | **Language** | TypeScript (ESM modules) |
 | **Database** | SQLite (better-sqlite3) |
+| **API Framework** | Fastify |
+| **Web UI** | React 19 + Vite 7 |
 | **Test Framework** | Vitest |
-| **CLI Framework** | Commander.js + @clack/prompts |
 | **Linting** | ESLint |
 | **Formatting** | Prettier |
 
 ### Common Commands
 
 ```bash
-npm run dev [command]         # Run CLI in dev mode
 npm run build                 # Compile TypeScript
+npm run dev:api:dev           # Run API server (dev mode)
+npm run dev:api:prod          # Run API server (prod mode)
+npm run dev:web               # Run web UI dev server
+npm run dev:all               # Run API and web UI together
 npm test                      # Run tests
 npm run lint                  # Run ESLint
 npm run format                # Run Prettier
-npm run dev migrate           # Run database migrations
+npm run migrate               # Run database migrations
 ```
 
 ---
@@ -44,17 +48,20 @@ npm run dev migrate           # Run database migrations
 
 ```
 src/
-├── cli/                          # Command-line interface
-│   ├── index.ts                  # Main CLI entry point
-│   ├── utils/
-│   │   └── error-handler.ts      # Centralized error handling
-│   └── commands/
-│       ├── snapshot.ts           # Snapshot management
-│       ├── query.ts              # Natural language queries
-│       ├── portfolio.ts          # Portfolio analytics
-│       ├── allocation.ts         # Allocation targets
-│       ├── migrate.ts            # Database migrations
-│       └── env.ts                # Environment management
+├── api/                          # REST API (Fastify)
+│   ├── index.ts                  # API entry point
+│   ├── server.ts                 # Fastify server setup
+│   ├── context.ts                # Service initialization
+│   ├── error-handler.ts          # Centralized error handling
+│   └── routes/
+│       ├── index.ts              # Route registration
+│       ├── snapshots.ts          # Snapshot endpoints
+│       ├── portfolio.ts          # Portfolio endpoints
+│       ├── allocations.ts        # Allocation endpoints
+│       ├── assets.ts             # Asset endpoints
+│       ├── prices.ts             # Price endpoints
+│       ├── liabilities.ts        # Liability endpoints
+│       └── properties.ts         # Property endpoints
 │
 ├── database/
 │   ├── connection.ts             # DatabaseManager singleton
@@ -73,9 +80,7 @@ src/
 │   ├── allocation-target.ts      # Target management
 │   ├── property.ts               # Real estate operations
 │   ├── liability.ts              # Liability management
-│   ├── coinmarketcap.ts          # CoinMarketCap API client
-│   ├── claude.ts                 # Claude AI integration
-│   └── query-processor.ts        # Tool execution
+│   └── coinmarketcap.ts          # CoinMarketCap API client
 │
 ├── models/
 │   ├── snapshot.ts, holding.ts, asset.ts, rate.ts
@@ -88,15 +93,22 @@ src/
 └── utils/
     ├── config.ts                 # Configuration management
     ├── formatters.ts             # Number/Euro formatting
-    ├── logger.ts                 # Logging utility
     └── validators.ts             # Zod validators
+
+web/                              # React + Vite frontend
+├── src/
+│   ├── components/               # React components
+│   ├── pages/                    # Page components
+│   ├── hooks/                    # Custom hooks
+│   └── api/                      # API client
 
 tests/
 ├── helpers/                      # Test utilities
 │   ├── database-setup.ts         # Test DB initialization
-│   └── mock-factories.ts         # Mock object builders
+│   └── api-mocks.ts              # Mock API services
 ├── services/                     # Service unit tests
 ├── database/                     # Repository integration tests
+├── api/                          # API route tests
 └── utils/                        # Utility function tests
 
 data/
@@ -155,74 +167,91 @@ The fix is always: add `.js` to the import path.
 
 ## Adding New Features
 
-### Adding a New CLI Command
+### Adding a New API Endpoint
 
-**Step 1: Create the command file**
+**Step 1: Create the route file**
 
 ```typescript
-// src/cli/commands/my-command.ts
-import { Command } from 'commander';
-import * as clack from '@clack/prompts';
-import pc from 'picocolors';
-import { DatabaseManager } from '../../database/connection.js';
-import { LedgerRepository } from '../../database/ledger.js';
-import { configManager } from '../../utils/config.js';
-import { Logger } from '../../utils/logger.js';
-import { getCurrentEnvironment } from '../index.js';
+// src/api/routes/my-resource.ts
+import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
+import { z } from 'zod';
 
-export const myCommand = new Command('my-command')
-  .description('Description of what this command does')
-  .option('--verbose', 'Show detailed output')
-  .addCommand(
-    new Command('subcommand')
-      .description('A subcommand')
-      .action(handleSubcommand)
+// Define request/response schemas
+const CreateResourceBody = z.object({
+  name: z.string().min(1),
+  value: z.number().positive(),
+});
+
+type CreateResourceBody = z.infer<typeof CreateResourceBody>;
+
+export const myResourceRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) => {
+  // GET /api/my-resource
+  fastify.get('/', async () => {
+    const resources = fastify.services.myService.list();
+    return { resources };
+  });
+
+  // POST /api/my-resource
+  fastify.post<{ Body: CreateResourceBody }>(
+    '/',
+    async (request, reply) => {
+      const body = CreateResourceBody.parse(request.body);
+      const result = fastify.services.myService.create(body);
+      return reply.code(201).send(result);
+    }
   );
 
-function initializeServices() {
-  const env = getCurrentEnvironment();
-  const config = configManager.getWithEnvironment(env);
-  const ledgerDb = DatabaseManager.getLedgerDb(config.database.ledgerPath);
-  const ledgerRepo = new LedgerRepository(ledgerDb);
-  return { config, ledgerRepo };
-}
-
-async function handleSubcommand() {
-  clack.intro('My Command');
-
-  try {
-    const { ledgerRepo } = initializeServices();
-
-    // Your logic here
-
-    DatabaseManager.closeAll();
-    clack.outro('Success!');
-  } catch (error) {
-    Logger.error(error instanceof Error ? error.message : String(error));
-    DatabaseManager.closeAll();
-    clack.outro('Operation failed');
-    process.exit(1);
-  }
-}
+  // GET /api/my-resource/:id
+  fastify.get<{ Params: { id: string } }>(
+    '/:id',
+    async (request) => {
+      const { id } = request.params;
+      const resource = fastify.services.myService.getById(parseInt(id, 10));
+      return resource;
+    }
+  );
+};
 ```
 
-**Step 2: Register the command**
+**Step 2: Register the route**
 
 ```typescript
-// src/cli/index.ts
-import { myCommand } from './commands/my-command.js';
+// src/api/routes/index.ts
+import { myResourceRoutes } from './my-resource.js';
 
-// Add with other command registrations
-program.addCommand(myCommand);
+export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
+  // ... existing routes ...
+  await fastify.register(myResourceRoutes, { prefix: '/api/my-resource' });
+}
 ```
 
-**Step 3: Follow these patterns:**
+**Step 3: Add tests**
 
-- Initialize services with `getCurrentEnvironment()` and `configManager`
-- Always call `DatabaseManager.closeAll()` in finally blocks
-- Use `@clack/prompts` for user interaction
-- Use `Logger` instead of `console.log`
-- Use `picocolors` for colored output (never `pc.gray()`)
+```typescript
+// tests/api/routes/my-resource.test.ts
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { createTestServer } from '../../helpers/server-setup.js';
+
+describe('My Resource API', () => {
+  let app;
+
+  beforeEach(async () => {
+    app = await createTestServer();
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  it('should list resources', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/my-resource',
+    });
+    expect(response.statusCode).toBe(200);
+  });
+});
+```
 
 ---
 
@@ -322,53 +351,6 @@ npm run dev migrate            # Apply
 export interface Snapshot {
   // ... existing fields ...
   new_field?: string;
-}
-```
-
----
-
-### Adding a New Claude Tool
-
-**Step 1: Define the tool**
-
-```typescript
-// src/services/claude.ts
-const TOOL_DEFINITIONS = [
-  // ... existing tools ...
-  {
-    name: 'my_tool',
-    description: 'What this tool does',
-    input_schema: {
-      type: 'object',
-      properties: {
-        param1: {
-          type: 'string',
-          description: 'Description of param1',
-        },
-      },
-      required: ['param1'],
-    },
-  },
-];
-```
-
-**Step 2: Implement the executor**
-
-```typescript
-// src/services/query-processor.ts
-async processQuery(toolName: string, toolInput: any) {
-  switch (toolName) {
-    case 'my_tool': {
-      const result = await this.handleMyTool(toolInput);
-      return JSON.stringify(result);
-    }
-    // ... other cases ...
-  }
-}
-
-private async handleMyTool(input: { param1: string }) {
-  const data = this.ledgerRepo.getData(input.param1);
-  return { success: true, data };
 }
 ```
 

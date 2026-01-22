@@ -18,10 +18,12 @@ System design and architectural patterns used in Hoard.
 
 ## System Overview
 
-**Hoard** is a personal CFO platform for multi-asset wealth management. It's built as a TypeScript CLI application with:
+**Hoard** is a personal CFO platform for multi-asset wealth management. It's built as a TypeScript application with:
 
+- REST API via Fastify
+- React + Vite web UI
 - Local SQLite databases for data storage
-- External APIs for market data (CoinMarketCap) and AI queries (Claude)
+- External APIs for market data (CoinMarketCap)
 - Pure service layer with typed error handling
 - Monthly snapshot-based portfolio tracking
 
@@ -29,7 +31,6 @@ System design and architectural patterns used in Hoard.
 
 - **Unified Net Worth**: Track crypto, stocks, real estate, and liabilities
 - **Allocation Management**: Set targets and track drift
-- **Natural Language Queries**: Ask questions in plain English via Claude AI
 - **Decision Support**: Rebalancing suggestions and portfolio analytics
 
 ---
@@ -40,7 +41,6 @@ System design and architectural patterns used in Hoard.
 
 Financial data stays local. External APIs are only used for:
 - Cryptocurrency prices (CoinMarketCap)
-- Natural language processing (Claude)
 
 No user data is sent to external services.
 
@@ -53,9 +53,9 @@ Financial calculations are:
 
 ### 3. Progressive Disclosure
 
-- Simple overview first (`portfolio summary`)
-- Drill-down on demand (`snapshot view`, `allocation compare`)
-- Natural language for complex questions
+- Simple overview first (portfolio dashboard)
+- Drill-down on demand (snapshot details, allocation comparison)
+- Detailed data available via API endpoints
 
 ### 4. Correct by Construction
 
@@ -76,12 +76,26 @@ Designed for monthly portfolio reviews, not real-time trading. This simplifies:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                        CLI Commands Layer                        │
-│  (snapshot, query, portfolio, allocation, migrate, env)         │
+│                         Web UI (React + Vite)                    │
 │                                                                  │
-│  • User interaction via @clack/prompts                          │
-│  • Error handling with user-friendly messages                   │
-│  • Database connection management                               │
+│  • Portfolio dashboard                                          │
+│  • Snapshot management                                          │
+│  • Allocation tracking                                          │
+│  • Runs on http://localhost:5173                                │
+└────────┬─────────────────────────────────────────────────────────┘
+         │ HTTP/JSON
+         ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      REST API Layer (Fastify)                    │
+│                                                                  │
+│  • /api/snapshots - Snapshot management                         │
+│  • /api/portfolio - Portfolio analytics                         │
+│  • /api/allocations - Allocation targets                        │
+│  • /api/assets - Asset management                               │
+│  • /api/prices - Price data                                     │
+│  • /api/liabilities - Liability management                      │
+│  • /api/properties - Real estate properties                     │
+│  • Runs on http://localhost:3001                                │
 └────────┬─────────────────────────────────────────────────────────┘
          │
          ▼
@@ -101,13 +115,13 @@ Designed for monthly portfolio reviews, not real-time trading. This simplifies:
 │  │ (real estate)   │  │ (loans/mortg.)  │  │ Service         │ │
 │  └─────────────────┘  └─────────────────┘  └─────────────────┘ │
 │                                                                  │
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐ │
-│  │ CoinMarketCap   │  │ ClaudeService   │  │ QueryProcessor  │ │
-│  │ Service         │  │                 │  │                 │ │
-│  │                 │  │ • NL processing │  │ • Tool executor │ │
-│  │ • Rate limiting │  │ • Tool calling  │  │ • Result format │ │
-│  │ • Price fetch   │  │ • Conversation  │  │                 │ │
-│  └─────────────────┘  └─────────────────┘  └─────────────────┘ │
+│  ┌─────────────────┐                                            │
+│  │ CoinMarketCap   │                                            │
+│  │ Service         │                                            │
+│  │                 │                                            │
+│  │ • Rate limiting │                                            │
+│  │ • Price fetch   │                                            │
+│  └─────────────────┘                                            │
 └────────┬─────────────────────────────────────────────────────────┘
          │
          ▼
@@ -133,8 +147,8 @@ Designed for monthly portfolio reviews, not real-time trading. This simplifies:
 │  • snapshots         │  • rate_cache        │  • CoinMarketCap │
 │  • holdings          │  • historical_rates  │    (prices)      │
 │  • assets            │                      │                  │
-│  • liabilities       │  (5-minute TTL)      │  • Claude        │
-│  • liability_balance │                      │    (NL queries)  │
+│  • liabilities       │  (5-minute TTL)      │                  │
+│  • liability_balance │                      │                  │
 │  • allocation_target │                      │                  │
 │  • snapshot_cache    │                      │                  │
 └──────────────────────┴──────────────────────┴──────────────────┘
@@ -330,100 +344,81 @@ CLI Command
 | **PropertyService** | Real estate properties, equity calculations |
 | **LiabilityService** | Loans/mortgages, balance tracking |
 | **CoinMarketCapService** | Price API client, rate limiting |
-| **ClaudeService** | Natural language processing, tool calling |
-| **QueryProcessor** | Claude tool execution, result formatting |
 
 ---
 
 ## Data Flow
 
-### Example: Add Portfolio Snapshot
+### Example: Add Portfolio Snapshot via API
 
 ```
-User: npm run dev snapshot add
-    │
+Client: POST /api/snapshots
+    │   { "date": "2025-01-22", "notes": "Monthly review" }
     ▼
 ┌─────────────────────────────────────┐
-│ CLI: snapshot.ts                    │
-│ • Prompt for date, holdings         │
-│ • Initialize services               │
+│ API Route: snapshots.ts             │
+│ • Parse request body                │
+│ • Validate date format              │
 └────────────────┬────────────────────┘
                  │
                  ▼
 ┌─────────────────────────────────────┐
-│ SnapshotService.getOrCreateSnapshot │
+│ SnapshotService.createSnapshot      │
 │ • Validate date format              │
 │ • Check if exists                   │
-│ • Create if needed                  │
-└────────────────┬────────────────────┘
-                 │
-                 ▼
-┌─────────────────────────────────────┐
-│ For each holding:                   │
-│ SnapshotService.addHolding          │
-│ • Lookup/create asset               │
-│ • Create holding record             │
-│ • Invalidate snapshot cache         │
+│ • Create snapshot record            │
 └────────────────┬────────────────────┘
                  │
                  ▼
 ┌─────────────────────────────────────┐
 │ LedgerRepository                    │
-│ • INSERT INTO holdings              │
-│ • DELETE FROM snapshot_totals_cache │
+│ • INSERT INTO snapshots             │
 └────────────────┬────────────────────┘
                  │
                  ▼
 ┌─────────────────────────────────────┐
-│ DatabaseManager.closeAll()          │
-│ CLI: Display success message        │
+│ API: Return JSON response           │
+│ { "id": 1, "date": "2025-01-22" }   │
 └─────────────────────────────────────┘
 ```
 
-### Example: Natural Language Query
+### Example: Get Portfolio Summary
 
 ```
-User: "What's my portfolio worth?"
+Client: GET /api/portfolio/summary?date=2025-01-22
     │
     ▼
 ┌─────────────────────────────────────┐
-│ CLI: query.ts                       │
-│ • Initialize QueryProcessor         │
+│ API Route: portfolio.ts             │
+│ • Parse query parameters            │
 └────────────────┬────────────────────┘
                  │
                  ▼
 ┌─────────────────────────────────────┐
-│ QueryProcessor.processQuery()       │
-│ • Pass to ClaudeService             │
-└────────────────┬────────────────────┘
-                 │
-                 ▼
-┌─────────────────────────────────────┐
-│ ClaudeService                       │
-│ • Send to Claude API with tools     │
-│ • Claude decides: use                │
-│   calculate_portfolio_value tool    │
-└────────────────┬────────────────────┘
-                 │
-                 ▼
-┌─────────────────────────────────────┐
-│ QueryProcessor executes tool        │
-│ • PortfolioService.getPortfolioValue│
-└────────────────┬────────────────────┘
-                 │
-                 ▼
-┌─────────────────────────────────────┐
-│ PortfolioService                    │
+│ PortfolioService.getPortfolioValue  │
 │ • Get holdings from ledger          │
-│ • Get prices (cache → API)          │
-│ • Calculate totals                  │
+│ • Enrich with prices                │
 └────────────────┬────────────────────┘
                  │
                  ▼
 ┌─────────────────────────────────────┐
-│ Result → Claude                     │
-│ • Claude generates text response    │
-│ • Response displayed to user        │
+│ RatesRepository                     │
+│ • Check rate_cache (5-min TTL)      │
+│ • If miss: CoinMarketCapService     │
+└────────────────┬────────────────────┘
+                 │
+                 ▼
+┌─────────────────────────────────────┐
+│ Calculate totals                    │
+│ • Sum holding values                │
+│ • Sum liability balances            │
+│ • Calculate net worth               │
+└────────────────┬────────────────────┘
+                 │
+                 ▼
+┌─────────────────────────────────────┐
+│ API: Return JSON response           │
+│ { "total_assets_eur": 36250, ... }  │
 └─────────────────────────────────────┘
 ```
 
@@ -571,13 +566,6 @@ try {
 - **Storage efficiency**: One row per asset per month
 - **User workflow**: Matches monthly review cadence
 - **Price caching**: Acceptable to use 5-minute old prices
-
-### Why Claude for NL Queries?
-
-- **Tool calling**: Structured access to data
-- **Conversation**: Follow-up questions work naturally
-- **Intelligence**: Complex queries answered correctly
-- **No training**: Works out of the box
 
 ---
 
