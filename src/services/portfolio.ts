@@ -92,16 +92,10 @@ export class PortfolioService {
         }
       }
 
-      // Only fall back to stored value_eur if no rate found (backwards compatibility)
-      const fallbackValue =
-        holding.value_eur !== undefined && holding.value_eur !== null
-          ? holding.value_eur
-          : undefined;
-
       enriched.push({
         ...holding,
         current_price_eur: price,
-        current_value_eur: price ? holding.amount * price : fallbackValue,
+        current_value_eur: price ? holding.amount * price : undefined,
       });
     }
 

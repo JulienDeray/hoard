@@ -18,6 +18,7 @@ export interface MockServices {
   ledgerRepo: ReturnType<typeof createMockLedgerRepo>;
   ratesRepo: ReturnType<typeof createMockRatesRepo>;
   liabilityService: ReturnType<typeof createMockLiabilityService>;
+  propertyService: ReturnType<typeof createMockPropertyService>;
 }
 
 export function createMockSnapshotService() {
@@ -52,6 +53,24 @@ export function createMockLiabilityService() {
     createLiability: vi.fn(),
     updateLiability: vi.fn(),
     deleteLiability: vi.fn(),
+  };
+}
+
+export function createMockPropertyService() {
+  return {
+    create: vi.fn(),
+    list: vi.fn(),
+    getById: vi.fn(),
+    getBySymbol: vi.fn(),
+    update: vi.fn(),
+    updateValue: vi.fn(),
+    getRealEstateSummary: vi.fn().mockReturnValue({
+      totalPropertyValue: 0,
+      totalMortgageBalance: 0,
+      totalEquity: 0,
+      propertyCount: 0,
+      properties: [],
+    }),
   };
 }
 
@@ -115,6 +134,7 @@ export function createMockServices(): MockServices {
     ledgerRepo: createMockLedgerRepo(),
     ratesRepo: createMockRatesRepo(),
     liabilityService: createMockLiabilityService(),
+    propertyService: createMockPropertyService(),
   };
 }
 

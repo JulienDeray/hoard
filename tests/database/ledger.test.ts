@@ -240,7 +240,6 @@ describe('LedgerRepository', () => {
           snapshot_id: snapshotId,
           asset_id: ethAssetId,
           amount: 10,
-          value_eur: 25000,
           notes: 'Bought at discount',
         };
 
@@ -248,7 +247,6 @@ describe('LedgerRepository', () => {
         const result = repository.createHolding(input);
 
         // Assert
-        expect(result.value_eur).toBe(input.value_eur);
         expect(result.notes).toBe(input.notes);
       });
     });

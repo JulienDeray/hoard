@@ -115,7 +115,7 @@ describe('MigrationRunner', () => {
       ledgerDb = setupV2Db();
       ratesDb = setupRatesDb();
 
-      // Mark as latest version (v6)
+      // Mark as latest version (v7)
       ledgerDb.exec(`
         CREATE TABLE IF NOT EXISTS schema_version (
           version INTEGER PRIMARY KEY,
@@ -128,6 +128,7 @@ describe('MigrationRunner', () => {
         INSERT INTO schema_version VALUES (4, 'v4', datetime('now'));
         INSERT INTO schema_version VALUES (5, 'v5', datetime('now'));
         INSERT INTO schema_version VALUES (6, 'v6', datetime('now'));
+        INSERT INTO schema_version VALUES (7, 'v7', datetime('now'));
       `);
 
       runner = new MigrationRunner(ledgerDb, ratesDb, FAKE_DB_PATH);

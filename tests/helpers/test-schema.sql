@@ -1,4 +1,4 @@
--- Test database schema (v6 final state)
+-- Test database schema (v7 final state)
 -- This is a clean schema for testing purposes, not for migrations
 
 -- Schema version tracking
@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS schema_version (
     applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-INSERT INTO schema_version (version, description) VALUES (6, 'Add snapshot totals cache for fast list queries');
+INSERT INTO schema_version (version, description) VALUES (7, 'Add metadata column to assets for property details');
 
 -- Snapshots table (totals are calculated dynamically from holdings + rates)
 CREATE TABLE IF NOT EXISTS snapshots (
@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS snapshots (
 
 CREATE INDEX IF NOT EXISTS idx_snapshots_date ON snapshots(date);
 
--- Assets table (v3 schema)
+-- Assets table (v7 schema with metadata column)
 CREATE TABLE IF NOT EXISTS assets (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     symbol TEXT NOT NULL UNIQUE,
@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS assets (
     external_id TEXT,
     currency TEXT NOT NULL DEFAULT 'EUR',
     is_active INTEGER DEFAULT 1,
+    metadata TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT valid_asset_class CHECK (asset_class IN ('CRYPTO', 'FIAT', 'STOCK', 'REAL_ESTATE', 'COMMODITY', 'OTHER')),
@@ -39,6 +40,7 @@ CREATE TABLE IF NOT EXISTS assets (
 
 CREATE INDEX IF NOT EXISTS idx_assets_symbol ON assets(symbol);
 CREATE INDEX IF NOT EXISTS idx_assets_class ON assets(asset_class);
+CREATE INDEX IF NOT EXISTS idx_assets_real_estate ON assets(asset_class) WHERE asset_class = 'REAL_ESTATE';
 
 -- Holdings table (v4 schema with asset_id FK, no value_eur)
 CREATE TABLE IF NOT EXISTS holdings (

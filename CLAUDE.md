@@ -78,7 +78,8 @@ src/
 │       ├── ledger/                 # Ledger schema migrations
 │       │   ├── 001_initial.sql
 │       │   ├── 002_allocation_targets.sql
-│       │   └── 003_schema_v2.sql   # Multi-asset schema (current)
+│       │   ├── 003_schema_v2.sql   # Multi-asset schema
+│       │   └── 004_remove_value_eur.sql  # Remove redundant columns (current)
 │       └── rates/001_initial.sql   # Rates schema
 ├── services/
 │   ├── snapshot.ts                 # Pure service for snapshot operations
@@ -118,7 +119,7 @@ docs/
 └── koinly-import.md                # Koinly import guide
 ```
 
-## Domain Model (Schema v3)
+## Domain Model (Schema v6)
 
 ### Core Entities
 
@@ -132,13 +133,16 @@ docs/
 - Liability types: `LOAN`, `MORTGAGE`, `CREDIT_LINE`
 
 **Snapshot** — Point-in-time capture of entire financial state
-- Fields: id, date, notes, total_assets_eur, total_liabilities_eur, net_worth_eur
+- Fields: id, date, notes
+- Note: Totals (assets, liabilities, net worth) are calculated dynamically from holdings + rates DB
 
 **Holding** — Your position in an asset at a specific snapshot
-- Fields: id, snapshot_id (FK), asset_id (FK), amount, value_eur, notes
+- Fields: id, snapshot_id (FK), asset_id (FK), amount, notes
+- Note: Asset values are calculated dynamically from the rates DB (single source of truth)
 
 **LiabilityBalance** — Outstanding balance on a liability at a specific snapshot
-- Fields: snapshot_id (FK), liability_id (FK), outstanding_amount, value_eur
+- Fields: snapshot_id (FK), liability_id (FK), outstanding_amount
+- Note: All liabilities are in EUR, so outstanding_amount is the EUR value
 
 **AllocationTarget** — Desired portfolio allocation
 - Fields: id, target_type (`ASSET` or `ASSET_CLASS`), target_key, target_percentage, tolerance_pct, notes
@@ -185,7 +189,7 @@ AllocationTarget[]
 ```bash
 # Development
 npm run dev [command]              # Run CLI in dev mode with tsx
-npm run dev --env prod [command]   # Run against production database
+npm run dev -- --env prod [command]   # Run against production database
 npm run build                       # Compile TypeScript to dist/
 npm start                           # Run compiled CLI
 
@@ -199,7 +203,7 @@ npm run dev migrate                 # Run pending migrations (dev)
 npm run dev migrate --dry-run       # Preview migrations without applying
 npm run dev migrate --status        # Show current schema version
 npm run dev migrate --backfill      # Run data backfill operations
-npm run dev --env prod migrate      # Run migrations on production
+npm run dev -- --env prod migrate      # Run migrations on production
 
 # Testing and quality
 npm test                            # Run Vitest tests
@@ -394,7 +398,7 @@ The project uses a versioned migration system managed by `MigrationRunner`:
 - Supports dry-run mode to preview changes without applying
 - Creates automatic backup before migration (e.g., `ledger.db.backup.20240115_143052`)
 
-**Current schema version:** v3 (multi-asset + liabilities)
+**Current schema version:** v4 (removed redundant value_eur columns)
 
 ### Number Formatting
 
@@ -415,12 +419,13 @@ European locale formatting via `src/utils/formatters.ts`:
 ## Adding New Features
 
 ### Adding a New Migration
-1. Create SQL file in `src/database/migrations/ledger/` with next version number (e.g., `004_new_feature.sql`)
+1. Create SQL file in `src/database/migrations/ledger/` with next version number (e.g., `007_new_feature.sql`)
 2. Add migration entry to `MIGRATIONS` array in `src/database/migrations/runner.ts`
 3. Update model interfaces in `src/models/` to match schema changes
 4. Update repository methods in `src/database/ledger.ts`
 5. Test migration: `npm run dev migrate --dry-run`
 6. Apply migration: `npm run dev migrate`
+7. **Update the [Domain Model](https://www.notion.so/julienderay/Domain-Model-2ec3c026f755817689f9ff4acb111000) Notion page** with schema version and entity changes
 
 ### Adding a New CLI Command
 1. Create command file in `src/cli/commands/`

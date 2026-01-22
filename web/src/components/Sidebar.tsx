@@ -5,6 +5,7 @@ import {
   PieChart,
   Target,
   Wallet,
+  Building2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -12,6 +13,7 @@ const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/snapshots', icon: Camera, label: 'Snapshots' },
   { to: '/portfolio', icon: PieChart, label: 'Portfolio' },
+  { to: '/properties', icon: Building2, label: 'Properties' },
   { to: '/allocations', icon: Target, label: 'Allocations' },
 ];
 

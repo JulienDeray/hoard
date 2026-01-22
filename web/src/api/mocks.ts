@@ -7,56 +7,50 @@ import type {
   AllocationComparison,
 } from '@/types';
 
-// Mock snapshots
+// Mock snapshots (totals are calculated dynamically in detail view)
 export const mockSnapshots: Snapshot[] = [
   {
     id: 1,
     date: '2024-12-01',
     notes: 'December 2024 portfolio snapshot',
-    total_assets_eur: 45000,
-    net_worth_eur: 45000,
   },
   {
     id: 2,
     date: '2025-01-01',
     notes: 'January 2025 - New year portfolio',
-    total_assets_eur: 52000,
-    net_worth_eur: 52000,
   },
   {
     id: 3,
     date: '2025-02-01',
     notes: 'February 2025 snapshot',
-    total_assets_eur: 58500,
-    net_worth_eur: 58500,
   },
 ];
 
-// Mock holdings for each snapshot
+// Mock holdings for each snapshot (values are calculated from rates DB in production)
 const mockHoldingsMap: Record<string, HoldingWithAsset[]> = {
   '2024-12-01': [
-    { id: 1, snapshot_id: 1, asset_id: 1, amount: 0.5, value_eur: 20000, asset_symbol: 'BTC', asset_name: 'Bitcoin', asset_class: 'CRYPTO' },
-    { id: 2, snapshot_id: 1, asset_id: 2, amount: 5, value_eur: 10000, asset_symbol: 'ETH', asset_name: 'Ethereum', asset_class: 'CRYPTO' },
-    { id: 3, snapshot_id: 1, asset_id: 3, amount: 50, value_eur: 5000, asset_symbol: 'SOL', asset_name: 'Solana', asset_class: 'CRYPTO' },
-    { id: 4, snapshot_id: 1, asset_id: 4, amount: 5000, value_eur: 5000, asset_symbol: 'USDC', asset_name: 'USD Coin', asset_class: 'CRYPTO' },
-    { id: 5, snapshot_id: 1, asset_id: 5, amount: 5000, value_eur: 3000, asset_symbol: 'ADA', asset_name: 'Cardano', asset_class: 'CRYPTO' },
-    { id: 6, snapshot_id: 1, asset_id: 6, amount: 200, value_eur: 2000, asset_symbol: 'DOT', asset_name: 'Polkadot', asset_class: 'CRYPTO' },
+    { id: 1, snapshot_id: 1, asset_id: 1, amount: 0.5, asset_symbol: 'BTC', asset_name: 'Bitcoin', asset_class: 'CRYPTO' },
+    { id: 2, snapshot_id: 1, asset_id: 2, amount: 5, asset_symbol: 'ETH', asset_name: 'Ethereum', asset_class: 'CRYPTO' },
+    { id: 3, snapshot_id: 1, asset_id: 3, amount: 50, asset_symbol: 'SOL', asset_name: 'Solana', asset_class: 'CRYPTO' },
+    { id: 4, snapshot_id: 1, asset_id: 4, amount: 5000, asset_symbol: 'USDC', asset_name: 'USD Coin', asset_class: 'CRYPTO' },
+    { id: 5, snapshot_id: 1, asset_id: 5, amount: 5000, asset_symbol: 'ADA', asset_name: 'Cardano', asset_class: 'CRYPTO' },
+    { id: 6, snapshot_id: 1, asset_id: 6, amount: 200, asset_symbol: 'DOT', asset_name: 'Polkadot', asset_class: 'CRYPTO' },
   ],
   '2025-01-01': [
-    { id: 7, snapshot_id: 2, asset_id: 1, amount: 0.5, value_eur: 23000, asset_symbol: 'BTC', asset_name: 'Bitcoin', asset_class: 'CRYPTO' },
-    { id: 8, snapshot_id: 2, asset_id: 2, amount: 5.5, value_eur: 12000, asset_symbol: 'ETH', asset_name: 'Ethereum', asset_class: 'CRYPTO' },
-    { id: 9, snapshot_id: 2, asset_id: 3, amount: 60, value_eur: 7000, asset_symbol: 'SOL', asset_name: 'Solana', asset_class: 'CRYPTO' },
-    { id: 10, snapshot_id: 2, asset_id: 4, amount: 5000, value_eur: 5000, asset_symbol: 'USDC', asset_name: 'USD Coin', asset_class: 'CRYPTO' },
-    { id: 11, snapshot_id: 2, asset_id: 5, amount: 4000, value_eur: 3000, asset_symbol: 'ADA', asset_name: 'Cardano', asset_class: 'CRYPTO' },
-    { id: 12, snapshot_id: 2, asset_id: 6, amount: 200, value_eur: 2000, asset_symbol: 'DOT', asset_name: 'Polkadot', asset_class: 'CRYPTO' },
+    { id: 7, snapshot_id: 2, asset_id: 1, amount: 0.5, asset_symbol: 'BTC', asset_name: 'Bitcoin', asset_class: 'CRYPTO' },
+    { id: 8, snapshot_id: 2, asset_id: 2, amount: 5.5, asset_symbol: 'ETH', asset_name: 'Ethereum', asset_class: 'CRYPTO' },
+    { id: 9, snapshot_id: 2, asset_id: 3, amount: 60, asset_symbol: 'SOL', asset_name: 'Solana', asset_class: 'CRYPTO' },
+    { id: 10, snapshot_id: 2, asset_id: 4, amount: 5000, asset_symbol: 'USDC', asset_name: 'USD Coin', asset_class: 'CRYPTO' },
+    { id: 11, snapshot_id: 2, asset_id: 5, amount: 4000, asset_symbol: 'ADA', asset_name: 'Cardano', asset_class: 'CRYPTO' },
+    { id: 12, snapshot_id: 2, asset_id: 6, amount: 200, asset_symbol: 'DOT', asset_name: 'Polkadot', asset_class: 'CRYPTO' },
   ],
   '2025-02-01': [
-    { id: 13, snapshot_id: 3, asset_id: 1, amount: 0.55, value_eur: 26000, asset_symbol: 'BTC', asset_name: 'Bitcoin', asset_class: 'CRYPTO' },
-    { id: 14, snapshot_id: 3, asset_id: 2, amount: 6, value_eur: 14000, asset_symbol: 'ETH', asset_name: 'Ethereum', asset_class: 'CRYPTO' },
-    { id: 15, snapshot_id: 3, asset_id: 3, amount: 70, value_eur: 8500, asset_symbol: 'SOL', asset_name: 'Solana', asset_class: 'CRYPTO' },
-    { id: 16, snapshot_id: 3, asset_id: 4, amount: 5000, value_eur: 5000, asset_symbol: 'USDC', asset_name: 'USD Coin', asset_class: 'CRYPTO' },
-    { id: 17, snapshot_id: 3, asset_id: 5, amount: 4000, value_eur: 3000, asset_symbol: 'ADA', asset_name: 'Cardano', asset_class: 'CRYPTO' },
-    { id: 18, snapshot_id: 3, asset_id: 6, amount: 200, value_eur: 2000, asset_symbol: 'DOT', asset_name: 'Polkadot', asset_class: 'CRYPTO' },
+    { id: 13, snapshot_id: 3, asset_id: 1, amount: 0.55, asset_symbol: 'BTC', asset_name: 'Bitcoin', asset_class: 'CRYPTO' },
+    { id: 14, snapshot_id: 3, asset_id: 2, amount: 6, asset_symbol: 'ETH', asset_name: 'Ethereum', asset_class: 'CRYPTO' },
+    { id: 15, snapshot_id: 3, asset_id: 3, amount: 70, asset_symbol: 'SOL', asset_name: 'Solana', asset_class: 'CRYPTO' },
+    { id: 16, snapshot_id: 3, asset_id: 4, amount: 5000, asset_symbol: 'USDC', asset_name: 'USD Coin', asset_class: 'CRYPTO' },
+    { id: 17, snapshot_id: 3, asset_id: 5, amount: 4000, asset_symbol: 'ADA', asset_name: 'Cardano', asset_class: 'CRYPTO' },
+    { id: 18, snapshot_id: 3, asset_id: 6, amount: 200, asset_symbol: 'DOT', asset_name: 'Polkadot', asset_class: 'CRYPTO' },
   ],
 };
 
@@ -156,6 +150,16 @@ export async function getSnapshot(date: string): Promise<SnapshotDetail> {
   return { snapshot, holdings, liabilityBalances: [] };
 }
 
+// Mock values for portfolio holdings (in production these come from rates DB)
+const mockHoldingValues: Record<number, number> = {
+  1: 26000, // BTC
+  2: 14000, // ETH
+  3: 8500,  // SOL
+  4: 5000,  // USDC
+  5: 3000,  // ADA
+  6: 2000,  // DOT
+};
+
 export async function getPortfolioSummary(): Promise<PortfolioSummary> {
   await new Promise((resolve) => setTimeout(resolve, 250));
 
@@ -163,15 +167,18 @@ export async function getPortfolioSummary(): Promise<PortfolioSummary> {
   const holdings = mockHoldingsMap[latestSnapshot.date] || [];
   const totalAssetsEur = latestSnapshot.total_assets_eur || 0;
 
-  const portfolioHoldings = holdings.map((h) => ({
-    assetId: h.asset_id,
-    symbol: h.asset_symbol,
-    name: h.asset_name,
-    assetClass: h.asset_class as 'CRYPTO' | 'FIAT' | 'STOCK' | 'REAL_ESTATE' | 'COMMODITY' | 'OTHER',
-    amount: h.amount,
-    valueEur: h.value_eur || 0,
-    allocationPct: totalAssetsEur > 0 ? ((h.value_eur || 0) / totalAssetsEur) * 100 : 0,
-  }));
+  const portfolioHoldings = holdings.map((h) => {
+    const valueEur = mockHoldingValues[h.asset_id] || 0;
+    return {
+      assetId: h.asset_id,
+      symbol: h.asset_symbol,
+      name: h.asset_name,
+      assetClass: h.asset_class as 'CRYPTO' | 'FIAT' | 'STOCK' | 'REAL_ESTATE' | 'COMMODITY' | 'OTHER',
+      amount: h.amount,
+      valueEur,
+      allocationPct: totalAssetsEur > 0 ? (valueEur / totalAssetsEur) * 100 : 0,
+    };
+  });
 
   return {
     date: latestSnapshot.date,

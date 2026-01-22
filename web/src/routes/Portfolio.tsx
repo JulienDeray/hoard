@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/table';
 import { usePortfolioSummary } from '@/api/hooks';
 import { useQueryClient } from '@tanstack/react-query';
-import { Wallet, RefreshCw, TrendingUp, Coins } from 'lucide-react';
+import { Wallet, RefreshCw, TrendingUp, Coins, Home, Building2 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 
 function formatCurrency(value: number): string {
@@ -178,40 +178,117 @@ export function Portfolio() {
         </Card>
       </div>
 
-      {/* Allocation Bar */}
-      {portfolio.holdings.length > 0 && (
+      {/* Real Estate Section */}
+      {portfolio.realEstateSummary && portfolio.realEstateSummary.propertyCount > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Building2 className="h-5 w-5" />
+              Real Estate
+            </CardTitle>
+            <CardDescription>Property values and equity breakdown</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {/* Summary Stats */}
+            <div className="mb-6 grid gap-4 md:grid-cols-3">
+              <div className="rounded-lg bg-muted/50 p-4">
+                <p className="text-sm font-medium text-muted-foreground">Total Value</p>
+                <p className="text-2xl font-bold">
+                  {formatCurrency(portfolio.realEstateSummary.totalPropertyValue)}
+                </p>
+              </div>
+              <div className="rounded-lg bg-muted/50 p-4">
+                <p className="text-sm font-medium text-muted-foreground">Total Mortgages</p>
+                <p className="text-2xl font-bold">
+                  {formatCurrency(portfolio.realEstateSummary.totalMortgageBalance)}
+                </p>
+              </div>
+              <div className="rounded-lg bg-muted/50 p-4">
+                <p className="text-sm font-medium text-muted-foreground">Total Equity</p>
+                <p className="text-2xl font-bold text-emerald-600">
+                  {formatCurrency(portfolio.realEstateSummary.totalEquity)}
+                </p>
+              </div>
+            </div>
+
+            {/* Properties Table */}
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Property</TableHead>
+                  <TableHead className="text-right">Value</TableHead>
+                  <TableHead className="text-right">Mortgage</TableHead>
+                  <TableHead className="text-right">Equity</TableHead>
+                  <TableHead className="text-right">LTV</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {portfolio.realEstateSummary.properties.map((property) => (
+                  <TableRow key={property.id}>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Home className="h-4 w-4 text-muted-foreground" />
+                        <div>
+                          <span className="font-medium">{property.name}</span>
+                          <span className="ml-2 text-xs text-muted-foreground">
+                            {property.propertyType.replace('_', ' ')}
+                          </span>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {formatCurrency(property.currentValue)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {property.mortgageBalance !== null
+                        ? formatCurrency(property.mortgageBalance)
+                        : '-'}
+                    </TableCell>
+                    <TableCell className="text-right font-semibold text-emerald-600">
+                      {formatCurrency(property.equity)}
+                    </TableCell>
+                    <TableCell className="text-right text-muted-foreground">
+                      {property.ltvPercentage !== null
+                        ? formatPercentage(property.ltvPercentage)
+                        : '-'}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Allocation Bar - Asset Class Distribution */}
+      {portfolio.assetClassAllocation.length > 0 && (
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Allocation Distribution</CardTitle>
+            <CardTitle className="text-sm font-medium">Asset Allocation</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex h-4 w-full overflow-hidden rounded-full">
-              {portfolio.holdings.map((holding, index) => (
+              {portfolio.assetClassAllocation.map((allocation, index) => (
                 <div
-                  key={holding.assetId}
+                  key={allocation.assetClass}
                   className={`${ALLOCATION_COLORS[index % ALLOCATION_COLORS.length]} transition-all`}
-                  style={{ width: `${holding.allocationPct}%` }}
-                  title={`${holding.symbol}: ${formatPercentage(holding.allocationPct)}`}
+                  style={{ width: `${allocation.allocationPct}%` }}
+                  title={`${allocation.displayName}: ${formatPercentage(allocation.allocationPct)}`}
                 />
               ))}
             </div>
             <div className="mt-3 flex flex-wrap gap-3">
-              {portfolio.holdings.slice(0, 6).map((holding, index) => (
-                <div key={holding.assetId} className="flex items-center gap-1.5 text-sm">
+              {portfolio.assetClassAllocation.map((allocation, index) => (
+                <div key={allocation.assetClass} className="flex items-center gap-1.5 text-sm">
                   <div
                     className={`h-3 w-3 rounded-full ${ALLOCATION_COLORS[index % ALLOCATION_COLORS.length]}`}
                   />
-                  <span className="font-medium">{holding.symbol}</span>
+                  <span className="font-medium">{allocation.displayName}</span>
                   <span className="text-muted-foreground">
-                    {formatPercentage(holding.allocationPct)}
+                    {formatPercentage(allocation.allocationPct)}
                   </span>
                 </div>
               ))}
-              {portfolio.holdings.length > 6 && (
-                <span className="text-sm text-muted-foreground">
-                  +{portfolio.holdings.length - 6} more
-                </span>
-              )}
             </div>
           </CardContent>
         </Card>

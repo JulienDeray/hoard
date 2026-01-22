@@ -162,3 +162,28 @@ export class LiabilityBalanceNotFoundError extends ServiceError {
     );
   }
 }
+
+// ============================================================================
+// Property-related errors
+// ============================================================================
+
+export class PropertyNotFoundError extends ServiceError {
+  constructor(public readonly id: number) {
+    super(`Property with ID ${id} not found`, 'PROPERTY_NOT_FOUND');
+  }
+}
+
+export class InvalidPropertyTypeError extends ServiceError {
+  constructor(public readonly propertyType: string) {
+    super(
+      `Invalid property type: ${propertyType}. Valid types: PRIMARY_RESIDENCE, RENTAL, VACATION, COMMERCIAL, LAND, OTHER`,
+      'INVALID_PROPERTY_TYPE'
+    );
+  }
+}
+
+export class InvalidPropertyValueError extends ServiceError {
+  constructor(public readonly value: number) {
+    super(`Invalid property value: ${value}. Must be a positive number`, 'INVALID_PROPERTY_VALUE');
+  }
+}

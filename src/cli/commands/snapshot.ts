@@ -287,11 +287,6 @@ async function viewSnapshot(date: string) {
       );
     }
 
-    // Show snapshot totals if available
-    if (snapshot.net_worth_eur !== undefined && snapshot.net_worth_eur !== null) {
-      console.log(pc.cyan(`Net Worth (cached): ${formatEuro(snapshot.net_worth_eur)}`));
-    }
-
     DatabaseManager.closeAll();
     clack.outro(`Snapshot loaded: ${summary.holdings.length} holding(s)`);
   } catch (error) {
@@ -582,27 +577,15 @@ async function addSnapshot() {
       return;
     }
 
-    // If snapshot date is today, fetch and save current prices
+    // If snapshot date is today, fetch and save current prices to rates DB
     const today = format(new Date(), 'yyyy-MM-dd');
     if (date === today) {
       const spinner = clack.spinner();
       spinner.start('Fetching current prices...');
       try {
-        const priceResults = await snapshotService.fetchAndCachePrices(
+        await snapshotService.fetchAndCachePrices(
           holdings.map((h) => h.asset.symbol)
         );
-
-        // Update holding values
-        const currentHoldings = snapshotService.getHoldingsBySnapshotId(snapshot.id);
-        for (const priceResult of priceResults) {
-          if (priceResult.price) {
-            const holding = currentHoldings.find((h) => h.asset_symbol === priceResult.symbol);
-            if (holding) {
-              snapshotService.updateHoldingValue(holding.id, holding.amount * priceResult.price);
-            }
-          }
-        }
-
         spinner.stop('Current prices saved');
       } catch (error) {
         spinner.stop('Failed to fetch prices');
@@ -652,27 +635,11 @@ async function addSnapshot() {
         const spinner = clack.spinner();
         spinner.start('Fetching prices from CoinMarketCap...');
         try {
-          const priceResults = await snapshotService.fetchAndCachePrices(
+          await snapshotService.fetchAndCachePrices(
             holdings.map((h) => h.asset.symbol)
           );
 
-          // Update holding values (same as today's snapshot logic)
-          const currentHoldings = snapshotService.getHoldingsBySnapshotId(snapshot.id);
-          for (const priceResult of priceResults) {
-            if (priceResult.price) {
-              const holding = currentHoldings.find(
-                (h) => h.asset_symbol === priceResult.symbol
-              );
-              if (holding) {
-                snapshotService.updateHoldingValue(
-                  holding.id,
-                  holding.amount * priceResult.price
-                );
-              }
-            }
-          }
-
-          // Get portfolio value
+          // Get portfolio value (values calculated from rates DB)
           const summary = await portfolioService.getPortfolioValue(date);
           if (summary) {
             spinner.stop('Prices updated');
@@ -746,9 +713,6 @@ async function deleteSingleHolding(
   console.log(pc.cyan(`  Snapshot: ${date}`));
   console.log(pc.cyan(`  Asset: ${holding.asset_symbol} (${holding.asset_name})`));
   console.log(pc.cyan(`  Amount: ${holding.amount}`));
-  if (holding.value_eur) {
-    console.log(pc.cyan(`  Value: ${formatEuro(holding.value_eur)}`));
-  }
   console.log(pc.yellow(`\nRemaining assets after deletion: ${holdings.length - 1}`));
   console.log();
 
@@ -791,9 +755,6 @@ async function deleteEntireSnapshot(
   console.log(pc.bold('\n  Holdings:'));
   holdings.forEach(h => {
     console.log(pc.cyan(`    - ${h.asset_symbol} (${h.asset_name}): ${h.amount}`));
-    if (h.value_eur) {
-      console.log(pc.cyan(`      Value: ${formatEuro(h.value_eur)}`));
-    }
   });
   console.log(pc.red(`\nThis will delete the snapshot and all ${holdings.length} holding(s).`));
   console.log();

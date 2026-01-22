@@ -10,6 +10,7 @@ export interface Asset {
   external_id?: string; // Was cmc_id (number), now generic string
   currency: string;
   is_active: boolean;
+  metadata?: string; // JSON-encoded metadata (e.g., PropertyMetadata for REAL_ESTATE)
   created_at: string;
   updated_at: string;
 }
@@ -21,6 +22,7 @@ export interface CreateAssetInput {
   valuation_source?: ValuationSource;
   external_id?: string;
   currency?: string;
+  metadata?: string;
 }
 
 export interface UpdateAssetInput {
@@ -30,6 +32,7 @@ export interface UpdateAssetInput {
   external_id?: string;
   currency?: string;
   is_active?: boolean;
+  metadata?: string;
 }
 
 // Legacy support - maps old cmc_id to external_id

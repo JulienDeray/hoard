@@ -1,6 +1,9 @@
 // Asset types
 export type AssetClass = 'CRYPTO' | 'FIAT' | 'STOCK' | 'REAL_ESTATE' | 'COMMODITY' | 'OTHER';
 
+// Property types
+export type PropertyType = 'PRIMARY_RESIDENCE' | 'RENTAL' | 'VACATION' | 'COMMERCIAL' | 'LAND' | 'OTHER';
+
 // Liability types
 export type LiabilityType = 'LOAN' | 'MORTGAGE' | 'CREDIT_LINE';
 
@@ -118,6 +121,33 @@ export interface PortfolioHolding {
   allocationPct: number;
 }
 
+// Real Estate types
+export interface RealEstateProperty {
+  id: number;
+  symbol: string;
+  name: string;
+  propertyType: PropertyType;
+  currentValue: number;
+  mortgageBalance: number | null;
+  equity: number;
+  ltvPercentage: number | null;
+}
+
+export interface RealEstateSummary {
+  totalPropertyValue: number;
+  totalMortgageBalance: number;
+  totalEquity: number;
+  propertyCount: number;
+  properties: RealEstateProperty[];
+}
+
+export interface AssetClassAllocation {
+  assetClass: AssetClass;
+  displayName: string;
+  valueEur: number;
+  allocationPct: number;
+}
+
 export interface PortfolioSummary {
   date: string;
   totalAssetsEur: number;
@@ -126,6 +156,8 @@ export interface PortfolioSummary {
   holdings: PortfolioHolding[];
   assetCount: number;
   snapshotDate: string;
+  realEstateSummary?: RealEstateSummary;
+  assetClassAllocation: AssetClassAllocation[];
 }
 
 // Form-specific types
@@ -208,4 +240,56 @@ export interface LiabilityBalanceResponse {
 
 export interface DeleteLiabilityBalanceResponse {
   deleted: boolean;
+}
+
+// Property API types
+export interface PropertyWithDetails {
+  id: number;
+  symbol: string;
+  name: string;
+  propertyType: PropertyType;
+  address?: string;
+  city?: string;
+  country?: string;
+  purchaseDate?: string;
+  purchasePrice?: number;
+  squareMeters?: number;
+  rooms?: number;
+  rentalIncome?: number;
+  currentValue: number;
+  mortgageBalance: number | null;
+  mortgageId: number | null;
+  equity: number;
+  ltvPercentage: number | null;
+  currency: string;
+}
+
+export interface CreatePropertyMortgageRequest {
+  name: string;
+  originalAmount: number;
+  outstandingAmount: number;
+  interestRate?: number;
+  startDate?: string;
+  termMonths?: number;
+}
+
+export interface CreatePropertyRequest {
+  name: string;
+  propertyType: PropertyType;
+  currentValue: number;
+  address?: string;
+  city?: string;
+  country?: string;
+  purchaseDate?: string;
+  purchasePrice?: number;
+  squareMeters?: number;
+  rooms?: number;
+  rentalIncome?: number;
+  currency?: string;
+  mortgage?: CreatePropertyMortgageRequest;
+}
+
+export interface UpdatePropertyValueRequest {
+  value: number;
+  valuationDate?: string;
 }

@@ -64,7 +64,6 @@ export class QueryProcessor {
           asset: h.asset_symbol,
           name: h.asset_name,
           amount: h.amount,
-          value_eur: h.value_eur,
         })),
       };
     } else {
@@ -80,7 +79,6 @@ export class QueryProcessor {
           asset: h.asset_symbol,
           name: h.asset_name,
           amount: h.amount,
-          value_eur: h.value_eur,
         })),
       };
     }
@@ -137,8 +135,6 @@ export class QueryProcessor {
         date: s.date,
         notes: s.notes,
         created_at: s.created_at,
-        total_assets_eur: s.total_assets_eur,
-        net_worth_eur: s.net_worth_eur,
       })),
     };
   }

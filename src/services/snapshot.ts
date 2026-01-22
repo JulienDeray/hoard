@@ -96,7 +96,6 @@ export interface DeleteSnapshotResult {
 
 export interface UpdateHoldingInput {
   amount?: number;
-  valueEur?: number;
   notes?: string;
 }
 
@@ -127,11 +126,6 @@ export interface UpdateLiabilityBalanceResult {
   previousAmount: number;
 }
 
-export interface RecalculateTotalsResult {
-  totalAssetsEur: number;
-  totalLiabilitiesEur: number;
-  netWorthEur: number;
-}
 
 // ============================================================================
 // Service class
@@ -437,13 +431,6 @@ export class SnapshotService {
   }
 
   /**
-   * Update the EUR value of a holding
-   */
-  updateHoldingValue(holdingId: number, valueEur: number): void {
-    this.ledgerRepo.updateHolding(holdingId, { value_eur: valueEur });
-  }
-
-  /**
    * Get holdings for a snapshot by ID
    */
   getHoldingsBySnapshotId(snapshotId: number): HoldingWithAsset[] {
@@ -487,9 +474,8 @@ export class SnapshotService {
     const previousAmount = holding.amount;
 
     // Build updates object
-    const updates: { amount?: number; value_eur?: number; notes?: string } = {};
+    const updates: { amount?: number; notes?: string } = {};
     if (input.amount !== undefined) updates.amount = input.amount;
-    if (input.valueEur !== undefined) updates.value_eur = input.valueEur;
     if (input.notes !== undefined) updates.notes = input.notes;
 
     // Update the holding
@@ -538,22 +524,6 @@ export class SnapshotService {
     }
 
     return results;
-  }
-
-  /**
-   * Update holding values based on current prices
-   */
-  async updateHoldingValues(snapshotId: number): Promise<void> {
-    const holdings = this.ledgerRepo.getHoldingsBySnapshotId(snapshotId);
-
-    for (const holding of holdings) {
-      const result = await this.fetchAndCachePrice(holding.asset_symbol);
-
-      if (result.price) {
-        const valueEur = holding.amount * result.price;
-        this.ledgerRepo.updateHolding(holding.id, { value_eur: valueEur });
-      }
-    }
   }
 
   // ==========================================================================
@@ -686,40 +656,6 @@ export class SnapshotService {
     };
   }
 
-  /**
-   * Recalculate and update snapshot totals
-   * @throws SnapshotNotFoundError if snapshot doesn't exist
-   */
-  recalculateSnapshotTotals(snapshotId: number): RecalculateTotalsResult {
-    const snapshot = this.ledgerRepo.getSnapshotById(snapshotId);
-    if (!snapshot) {
-      throw new SnapshotNotFoundError(`ID:${snapshotId}`);
-    }
-
-    // Calculate total assets
-    const holdings = this.ledgerRepo.getHoldingsBySnapshotId(snapshotId);
-    const totalAssetsEur = holdings.reduce((sum, h) => sum + (h.value_eur || 0), 0);
-
-    // Calculate total liabilities
-    const liabilityBalances = this.ledgerRepo.getLiabilityBalancesBySnapshotId(snapshotId);
-    const totalLiabilitiesEur = liabilityBalances.reduce(
-      (sum, lb) => sum + (lb.value_eur || lb.outstanding_amount || 0),
-      0
-    );
-
-    // Calculate net worth
-    const netWorthEur = totalAssetsEur - totalLiabilitiesEur;
-
-    // Update snapshot
-    this.ledgerRepo.updateSnapshotTotals(snapshotId, {
-      total_assets_eur: totalAssetsEur,
-      total_liabilities_eur: totalLiabilitiesEur,
-      net_worth_eur: netWorthEur,
-    });
-
-    return { totalAssetsEur, totalLiabilitiesEur, netWorthEur };
-  }
-
   // ==========================================================================
   // Liability balance operations
   // ==========================================================================
@@ -775,15 +711,11 @@ export class SnapshotService {
       // Update existing balance
       this.ledgerRepo.updateLiabilityBalance(existingBalance.id, {
         outstanding_amount: outstandingAmount,
-        value_eur: outstandingAmount, // EUR only for v3
       });
 
       // Re-fetch to get updated data with details
       const updatedBalances = this.ledgerRepo.getLiabilityBalancesBySnapshotId(snapshot.id);
       const updatedBalance = updatedBalances.find((lb) => lb.liability_id === liabilityId)!;
-
-      // Recalculate totals
-      this.recalculateSnapshotTotals(snapshot.id);
 
       return { liabilityBalance: updatedBalance, isUpdate: true };
     }
@@ -793,15 +725,11 @@ export class SnapshotService {
       snapshot_id: snapshot.id,
       liability_id: liabilityId,
       outstanding_amount: outstandingAmount,
-      value_eur: outstandingAmount, // EUR only for v3
     });
 
     // Fetch the created balance with details
     const newBalances = this.ledgerRepo.getLiabilityBalancesBySnapshotId(snapshot.id);
     const newBalance = newBalances.find((lb) => lb.liability_id === liabilityId)!;
-
-    // Recalculate totals
-    this.recalculateSnapshotTotals(snapshot.id);
 
     return { liabilityBalance: newBalance, isUpdate: false };
   }
@@ -838,15 +766,11 @@ export class SnapshotService {
     // Update balance
     this.ledgerRepo.updateLiabilityBalance(existingBalance.id, {
       outstanding_amount: outstandingAmount,
-      value_eur: outstandingAmount, // EUR only for v3
     });
 
     // Re-fetch to get updated data with details
     const updatedBalances = this.ledgerRepo.getLiabilityBalancesBySnapshotId(snapshot.id);
     const updatedBalance = updatedBalances.find((lb) => lb.liability_id === liabilityId)!;
-
-    // Recalculate totals
-    this.recalculateSnapshotTotals(snapshot.id);
 
     return { liabilityBalance: updatedBalance, previousAmount };
   }
@@ -876,8 +800,5 @@ export class SnapshotService {
 
     // Delete balance
     this.ledgerRepo.deleteLiabilityBalance(existingBalance.id);
-
-    // Recalculate totals
-    this.recalculateSnapshotTotals(snapshot.id);
   }
 }

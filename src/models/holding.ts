@@ -3,7 +3,6 @@ export interface Holding {
   snapshot_id: number;
   asset_id: number;
   amount: number;
-  value_eur?: number;
   notes?: string;
   created_at: string;
   updated_at: string;
@@ -13,13 +12,11 @@ export interface CreateHoldingInput {
   snapshot_id: number;
   asset_id: number;
   amount: number;
-  value_eur?: number;
   notes?: string;
 }
 
 export interface UpdateHoldingInput {
   amount?: number;
-  value_eur?: number;
   notes?: string;
 }
 

@@ -61,6 +61,11 @@ const MIGRATIONS: Migration[] = [
     description: 'Add snapshot totals cache for fast list queries',
     sql: '006_snapshot_totals_cache.sql',
   },
+  {
+    version: 7,
+    description: 'Add metadata column to assets for property details',
+    sql: '007_add_asset_metadata.sql',
+  },
 ];
 
 export class MigrationRunner {

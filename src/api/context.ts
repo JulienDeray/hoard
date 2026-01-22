@@ -14,6 +14,7 @@ import { AllocationTargetService } from '../services/allocation-target.js';
 import { AllocationService } from '../services/allocation.js';
 import { PortfolioService } from '../services/portfolio.js';
 import { LiabilityService } from '../services/liability.js';
+import { PropertyService } from '../services/property.js';
 import { configManager } from '../utils/config.js';
 
 export interface ApiServices {
@@ -22,6 +23,7 @@ export interface ApiServices {
   allocationService: AllocationService;
   portfolioService: PortfolioService;
   liabilityService: LiabilityService;
+  propertyService: PropertyService;
   ledgerRepo: LedgerRepository;
   ratesRepo: RatesRepository;
 }
@@ -73,6 +75,8 @@ export async function initializeContext(
 
   const liabilityService = new LiabilityService(ledgerRepo);
 
+  const propertyService = new PropertyService(ledgerRepo, ratesRepo, baseCurrency);
+
   // Decorate Fastify with services
   const services: ApiServices = {
     snapshotService,
@@ -80,6 +84,7 @@ export async function initializeContext(
     allocationService,
     portfolioService,
     liabilityService,
+    propertyService,
     ledgerRepo,
     ratesRepo,
   };

@@ -119,13 +119,15 @@ export function SnapshotForm({
 
   // Handlers
   const handleAddHolding = useCallback((asset: Asset) => {
+    const isRealEstate = asset.asset_class === 'REAL_ESTATE';
     const newHolding: FormHolding = {
       tempId: generateTempId(),
       assetId: asset.id,
       assetSymbol: asset.symbol,
       assetName: asset.name,
       assetClass: asset.asset_class,
-      amount: '',
+      // Real estate always has amount=1, other assets need manual input
+      amount: isRealEstate ? '1' : '',
     };
     setHoldings((prev) => [...prev, newHolding]);
     setErrors((prev) => ({ ...prev, holdings: undefined }));

@@ -42,7 +42,6 @@ export interface LiabilityBalance {
   snapshot_id: number;
   liability_id: number;
   outstanding_amount: number;
-  value_eur?: number;
   created_at: string;
   updated_at: string;
 }
@@ -51,12 +50,10 @@ export interface CreateLiabilityBalanceInput {
   snapshot_id: number;
   liability_id: number;
   outstanding_amount: number;
-  value_eur?: number;
 }
 
 export interface UpdateLiabilityBalanceInput {
   outstanding_amount?: number;
-  value_eur?: number;
 }
 
 // For display (joined with liabilities)

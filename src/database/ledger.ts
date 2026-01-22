@@ -261,8 +261,8 @@ export class LedgerRepository {
 
   createAsset(input: CreateAssetInput): Asset {
     const stmt = this.db.prepare(`
-      INSERT INTO assets (symbol, name, asset_class, valuation_source, external_id, currency)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO assets (symbol, name, asset_class, valuation_source, external_id, currency, metadata)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `);
 
     const result = stmt.run(
@@ -271,7 +271,8 @@ export class LedgerRepository {
       input.asset_class || 'CRYPTO',
       input.valuation_source || 'CMC',
       input.external_id || null,
-      input.currency || 'EUR'
+      input.currency || 'EUR',
+      input.metadata || null
     );
 
     return this.getAssetById(Number(result.lastInsertRowid))!;
@@ -380,6 +381,10 @@ export class LedgerRepository {
     if (updates.is_active !== undefined) {
       fields.push('is_active = ?');
       values.push(updates.is_active ? 1 : 0);
+    }
+    if (updates.metadata !== undefined) {
+      fields.push('metadata = ?');
+      values.push(updates.metadata);
     }
 
     if (fields.length === 0) return;
@@ -830,5 +835,82 @@ export class LedgerRepository {
     `);
 
     stmt.run(snapshotId);
+  }
+
+  // ============================================================================
+  // Real Estate / Property operations
+  // ============================================================================
+
+  /**
+   * List all assets with asset_class = 'REAL_ESTATE'
+   */
+  listRealEstateAssets(activeOnly = true): Asset[] {
+    const query = activeOnly
+      ? 'SELECT * FROM assets WHERE asset_class = ? AND is_active = 1 ORDER BY name'
+      : 'SELECT * FROM assets WHERE asset_class = ? ORDER BY name';
+
+    const stmt = this.db.prepare(query);
+    const results = stmt.all('REAL_ESTATE') as any[];
+
+    return results.map((r) => ({
+      ...r,
+      is_active: r.is_active === 1,
+    }));
+  }
+
+  /**
+   * Get all snapshot IDs that contain holdings for a specific asset
+   * Used for cache invalidation when asset values change
+   */
+  getSnapshotsWithAsset(assetId: number): number[] {
+    const stmt = this.db.prepare(`
+      SELECT DISTINCT snapshot_id FROM holdings WHERE asset_id = ?
+    `);
+
+    const results = stmt.all(assetId) as { snapshot_id: number }[];
+    return results.map((r) => r.snapshot_id);
+  }
+
+  /**
+   * Get the mortgage (liability) linked to a specific asset
+   */
+  getMortgageByLinkedAsset(assetId: number): Liability | undefined {
+    const stmt = this.db.prepare(`
+      SELECT * FROM liabilities WHERE linked_asset_id = ? AND is_active = 1
+    `);
+
+    const result = stmt.get(assetId) as any;
+    if (!result) return undefined;
+
+    return {
+      ...result,
+      is_active: result.is_active === 1,
+    };
+  }
+
+  /**
+   * Get the latest (most recent) balance for a liability
+   * Returns the balance from the most recent snapshot that contains this liability
+   */
+  getLatestMortgageBalance(liabilityId: number): LiabilityBalance | undefined {
+    const stmt = this.db.prepare(`
+      SELECT lb.* FROM liability_balances lb
+      JOIN snapshots s ON lb.snapshot_id = s.id
+      WHERE lb.liability_id = ?
+      ORDER BY s.date DESC
+      LIMIT 1
+    `);
+
+    return stmt.get(liabilityId) as LiabilityBalance | undefined;
+  }
+
+  /**
+   * Invalidate snapshot cache for all snapshots containing a specific asset
+   */
+  invalidateSnapshotCacheForAsset(assetId: number): void {
+    const snapshotIds = this.getSnapshotsWithAsset(assetId);
+    for (const snapshotId of snapshotIds) {
+      this.invalidateSnapshotCache(snapshotId);
+    }
   }
 }

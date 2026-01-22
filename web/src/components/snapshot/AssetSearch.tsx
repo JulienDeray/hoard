@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Check, Loader2 } from 'lucide-react';
+import { Check, Loader2, Home } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import {
@@ -93,29 +93,42 @@ export function AssetSearch({
             )}
             {filteredAssets && filteredAssets.length > 0 && (
               <CommandGroup>
-                {filteredAssets.map((asset) => (
-                  <CommandItem
-                    key={asset.id}
-                    value={`${asset.symbol}-${asset.id}`}
-                    onSelect={() => handleSelect(asset)}
-                    className="cursor-pointer"
-                  >
-                    <Check
-                      className={cn(
-                        'mr-2 h-4 w-4',
-                        excludeAssetIds.includes(asset.id)
-                          ? 'opacity-100'
-                          : 'opacity-0'
+                {filteredAssets.map((asset) => {
+                  const isRealEstate = asset.asset_class === 'REAL_ESTATE';
+                  return (
+                    <CommandItem
+                      key={asset.id}
+                      value={`${asset.symbol}-${asset.id}`}
+                      onSelect={() => handleSelect(asset)}
+                      className="cursor-pointer"
+                    >
+                      <Check
+                        className={cn(
+                          'mr-2 h-4 w-4',
+                          excludeAssetIds.includes(asset.id)
+                            ? 'opacity-100'
+                            : 'opacity-0'
+                        )}
+                      />
+                      {isRealEstate && (
+                        <Home className="mr-2 h-4 w-4 text-muted-foreground" />
                       )}
-                    />
-                    <div className="flex flex-col">
-                      <span className="font-medium">{asset.symbol}</span>
-                      <span className="text-sm text-muted-foreground">
-                        {asset.name}
-                      </span>
-                    </div>
-                  </CommandItem>
-                ))}
+                      <div className="flex flex-col">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{asset.symbol}</span>
+                          {isRealEstate && (
+                            <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                              Property
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-sm text-muted-foreground">
+                          {asset.name}
+                        </span>
+                      </div>
+                    </CommandItem>
+                  );
+                })}
               </CommandGroup>
             )}
           </CommandList>

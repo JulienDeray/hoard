@@ -54,7 +54,7 @@ async function runMigrate(options: { dryRun?: boolean; status?: boolean; backfil
 
     // Backfill only mode
     if (options.backfill) {
-      await runBackfillOnly(ledgerDb, ratesDb);
+      await runBackfillOnly(ledgerDb);
       ledgerDb.close();
       ratesDb.close();
       clack.outro('Backfill complete');
@@ -163,7 +163,7 @@ async function runMigrate(options: { dryRun?: boolean; status?: boolean; backfil
     });
 
     if (!clack.isCancel(doBackfill) && doBackfill) {
-      await runBackfillOnly(ledgerDb, ratesDb);
+      await runBackfillOnly(ledgerDb);
     }
 
     ledgerDb.close();
@@ -206,24 +206,15 @@ async function showStatus(runner: MigrationRunner): Promise<void> {
 }
 
 async function runBackfillOnly(
-  ledgerDb: Database.Database,
-  ratesDb: Database.Database
+  ledgerDb: Database.Database
 ): Promise<void> {
   const spinner = clack.spinner();
   spinner.start('Running backfill operations...');
 
-  const results = await runAllBackfills(ledgerDb, ratesDb);
+  const results = await runAllBackfills(ledgerDb);
 
   spinner.stop('Backfill complete');
 
   console.log(pc.bold('\nBackfill Results:'));
-  console.log(`  Holdings: ${pc.cyan(results.holdings.updated.toString())} updated, ${pc.cyan(results.holdings.skipped.toString())} skipped`);
   console.log(`  Snapshots: ${pc.cyan(results.snapshots.updated.toString())} updated`);
-
-  if (results.holdings.errors.length > 0) {
-    console.log(pc.yellow(`\n  Warnings (first 5):`));
-    results.holdings.errors.slice(0, 5).forEach((err) => {
-      console.log(`    - ${err}`);
-    });
-  }
 }

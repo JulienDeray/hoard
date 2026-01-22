@@ -6,6 +6,8 @@ import type {
   UpdateHoldingRequest,
   AddLiabilityBalanceRequest,
   UpdateLiabilityBalanceRequest,
+  CreatePropertyRequest,
+  UpdatePropertyValueRequest,
 } from '@/types';
 
 export function useSnapshots() {
@@ -181,6 +183,50 @@ export function useDeleteLiabilityBalance() {
       queryClient.invalidateQueries({ queryKey: ['snapshot', date] });
       queryClient.invalidateQueries({ queryKey: ['snapshots'] });
       queryClient.invalidateQueries({ queryKey: ['portfolio'] });
+    },
+  });
+}
+
+// Property hooks
+export function useProperties() {
+  return useQuery({
+    queryKey: ['properties'],
+    queryFn: api.getProperties,
+  });
+}
+
+export function useProperty(id: number) {
+  return useQuery({
+    queryKey: ['properties', id],
+    queryFn: () => api.getProperty(id),
+    enabled: !!id,
+  });
+}
+
+export function useCreateProperty() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: CreatePropertyRequest) => api.createProperty(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['properties'] });
+      queryClient.invalidateQueries({ queryKey: ['portfolio'] });
+      queryClient.invalidateQueries({ queryKey: ['liabilities'] });
+      queryClient.invalidateQueries({ queryKey: ['assets'] });
+    },
+  });
+}
+
+export function useUpdatePropertyValue() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: UpdatePropertyValueRequest }) =>
+      api.updatePropertyValue(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['properties'] });
+      queryClient.invalidateQueries({ queryKey: ['portfolio'] });
+      queryClient.invalidateQueries({ queryKey: ['snapshots'] });
     },
   });
 }

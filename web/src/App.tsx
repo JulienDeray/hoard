@@ -8,6 +8,7 @@ import { SnapshotNew } from '@/routes/SnapshotNew';
 import { SnapshotEdit } from '@/routes/SnapshotEdit';
 import { Portfolio } from '@/routes/Portfolio';
 import { Allocations } from '@/routes/Allocations';
+import { Properties } from '@/routes/Properties';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -30,6 +31,7 @@ function App() {
             <Route path="/snapshots/:date" element={<SnapshotDetail />} />
             <Route path="/snapshots/:date/edit" element={<SnapshotEdit />} />
             <Route path="/portfolio" element={<Portfolio />} />
+            <Route path="/properties" element={<Properties />} />
             <Route path="/allocations" element={<Allocations />} />
           </Route>
         </Routes>

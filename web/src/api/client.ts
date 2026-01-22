@@ -16,6 +16,9 @@ import type {
   UpdateLiabilityBalanceRequest,
   LiabilityBalanceResponse,
   DeleteLiabilityBalanceResponse,
+  PropertyWithDetails,
+  CreatePropertyRequest,
+  UpdatePropertyValueRequest,
 } from '@/types';
 
 const API_BASE = '/api';
@@ -142,6 +145,23 @@ export const api = {
   deleteLiabilityBalance: (date: string, liabilityId: number): Promise<DeleteLiabilityBalanceResponse> =>
     fetchApi<DeleteLiabilityBalanceResponse>(`/snapshots/${date}/liabilities/${liabilityId}`, {
       method: 'DELETE',
+    }),
+
+  // Properties
+  getProperties: (): Promise<PropertyWithDetails[]> => fetchApi<PropertyWithDetails[]>('/properties'),
+
+  getProperty: (id: number): Promise<PropertyWithDetails> => fetchApi<PropertyWithDetails>(`/properties/${id}`),
+
+  createProperty: (data: CreatePropertyRequest): Promise<PropertyWithDetails> =>
+    fetchApi<PropertyWithDetails>('/properties', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updatePropertyValue: (id: number, data: UpdatePropertyValueRequest): Promise<PropertyWithDetails> =>
+    fetchApi<PropertyWithDetails>(`/properties/${id}/value`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
     }),
 };
 
