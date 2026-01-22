@@ -259,6 +259,87 @@ describe('RatesRepository', () => {
         expect(results[1].price).toBe(45000);
       });
     });
+
+    describe('getLatestHistoricalRate', () => {
+      it('should return the most recent rate regardless of date', () => {
+        // Arrange
+        repository.saveHistoricalRate({
+          asset_symbol: 'BTC',
+          base_currency: 'EUR',
+          price: 44000,
+          timestamp: '2024-01-14T12:00:00Z',
+        });
+
+        repository.saveHistoricalRate({
+          asset_symbol: 'BTC',
+          base_currency: 'EUR',
+          price: 46000,
+          timestamp: '2024-01-16T12:00:00Z',
+        });
+
+        repository.saveHistoricalRate({
+          asset_symbol: 'BTC',
+          base_currency: 'EUR',
+          price: 45000,
+          timestamp: '2024-01-15T12:00:00Z',
+        });
+
+        // Act
+        const result = repository.getLatestHistoricalRate('BTC');
+
+        // Assert - Should get the most recent (Jan 16)
+        expect(result?.price).toBe(46000);
+      });
+
+      it('should return undefined when no historical data exists', () => {
+        // Act
+        const result = repository.getLatestHistoricalRate('BTC');
+
+        // Assert
+        expect(result).toBeUndefined();
+      });
+
+      it('should filter by currency', () => {
+        // Arrange
+        repository.saveHistoricalRate({
+          asset_symbol: 'BTC',
+          base_currency: 'EUR',
+          price: 45000,
+          timestamp: '2024-01-15T12:00:00Z',
+        });
+
+        repository.saveHistoricalRate({
+          asset_symbol: 'BTC',
+          base_currency: 'USD',
+          price: 48000,
+          timestamp: '2024-01-15T13:00:00Z',
+        });
+
+        // Act
+        const eurResult = repository.getLatestHistoricalRate('BTC', 'EUR');
+        const usdResult = repository.getLatestHistoricalRate('BTC', 'USD');
+
+        // Assert
+        expect(eurResult?.price).toBe(45000);
+        expect(usdResult?.price).toBe(48000);
+      });
+
+      it('should not return rates for different symbols', () => {
+        // Arrange
+        repository.saveHistoricalRate({
+          asset_symbol: 'ETH',
+          base_currency: 'EUR',
+          price: 2750,
+          timestamp: '2024-01-15T12:00:00Z',
+        });
+
+        // Act
+        const result = repository.getLatestHistoricalRate('BTC');
+
+        // Assert
+        expect(result).toBeUndefined();
+      });
+    });
   });
 
   describe('Rate Cache Operations', () => {

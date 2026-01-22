@@ -98,6 +98,24 @@ export class RatesRepository {
     return stmt.all(symbol, baseCurrency, startDate, endDate) as HistoricalRate[];
   }
 
+  /**
+   * Get the most recent historical rate for a symbol (regardless of date).
+   * Useful as a fallback when cache is expired but we have historical data.
+   */
+  getLatestHistoricalRate(
+    symbol: string,
+    baseCurrency = 'EUR'
+  ): HistoricalRate | undefined {
+    const stmt = this.db.prepare(`
+      SELECT * FROM historical_rates
+      WHERE asset_symbol = ? AND base_currency = ?
+      ORDER BY timestamp DESC
+      LIMIT 1
+    `);
+
+    return stmt.get(symbol, baseCurrency) as HistoricalRate | undefined;
+  }
+
   // Rate cache operations
   getCachedRate(symbol: string, baseCurrency = 'EUR'): RateCache | undefined {
     const stmt = this.db.prepare(`

@@ -30,6 +30,7 @@ describe('PortfolioService', () => {
     mockRatesRepo = {
       getCachedRate: vi.fn(),
       getHistoricalRate: vi.fn(),
+      getLatestHistoricalRate: vi.fn(),
       updateCachedRate: vi.fn(),
     };
 
@@ -131,6 +132,7 @@ describe('PortfolioService', () => {
       mockLedgerRepo.getLatestHoldings.mockReturnValue(holdings);
       mockLedgerRepo.getLatestSnapshot.mockReturnValue(snapshot);
       mockRatesRepo.getCachedRate.mockReturnValue(null);
+      mockRatesRepo.getLatestHistoricalRate.mockReturnValue(undefined);
       mockCmcService.getCurrentPrice.mockRejectedValue(new Error('API error'));
 
       // Act
@@ -160,10 +162,31 @@ describe('PortfolioService', () => {
       expect(mockCmcService.getCurrentPrice).not.toHaveBeenCalled();
     });
 
-    it('should fetch from API when cache misses', async () => {
+    it('should use historical fallback when cache misses', async () => {
       // Arrange
       const holdings = [mockHolding({ asset_symbol: 'BTC', amount: 0.5 })];
       mockRatesRepo.getCachedRate.mockReturnValue(null);
+      mockRatesRepo.getLatestHistoricalRate.mockReturnValue({ price: 44000 });
+
+      // Act
+      const result = await service.enrichHoldingsWithPrices(holdings, null);
+
+      // Assert
+      expect(result[0].current_price_eur).toBe(44000);
+      expect(result[0].current_value_eur).toBe(0.5 * 44000);
+      expect(mockRatesRepo.getLatestHistoricalRate).toHaveBeenCalledWith(
+        'BTC',
+        'EUR'
+      );
+      // Should NOT call CMC API when historical data exists
+      expect(mockCmcService.getCurrentPrice).not.toHaveBeenCalled();
+    });
+
+    it('should fetch from API only when cache AND historical miss', async () => {
+      // Arrange
+      const holdings = [mockHolding({ asset_symbol: 'BTC', amount: 0.5 })];
+      mockRatesRepo.getCachedRate.mockReturnValue(null);
+      mockRatesRepo.getLatestHistoricalRate.mockReturnValue(undefined);
       mockCmcService.getCurrentPrice.mockResolvedValue(45000);
 
       // Act
@@ -198,10 +221,11 @@ describe('PortfolioService', () => {
       expect(mockCmcService.getCurrentPrice).not.toHaveBeenCalled();
     });
 
-    it('should handle API errors gracefully', async () => {
+    it('should handle API errors gracefully when no historical data', async () => {
       // Arrange
       const holdings = [mockHolding({ asset_symbol: 'BTC', amount: 0.5 })];
       mockRatesRepo.getCachedRate.mockReturnValue(null);
+      mockRatesRepo.getLatestHistoricalRate.mockReturnValue(undefined);
       mockCmcService.getCurrentPrice.mockRejectedValue(new Error('API error'));
 
       // Act

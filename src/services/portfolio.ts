@@ -74,20 +74,33 @@ export class PortfolioService {
         );
         price = historicalRate?.price;
       } else {
-        // Try cache first for current prices
+        // For current prices: cache → historical fallback → CMC API
+        // 1. Try cache first (5-minute TTL)
         const cached = this.ratesRepo.getCachedRate(holding.asset_symbol, this.baseCurrency);
         if (cached) {
           price = cached.price;
         } else {
-          // Fetch current price from API
-          try {
-            price = await this.cmcService.getCurrentPrice(holding.asset_symbol, this.baseCurrency);
-            // Update cache
-            this.ratesRepo.updateCachedRate(holding.asset_symbol, price, this.baseCurrency);
-          } catch (error) {
-            Logger.error(
-              `Failed to fetch price for ${holding.asset_symbol}: ${error instanceof Error ? error.message : String(error)}`
-            );
+          // 2. Try historical_rates as fallback (most recent price we've ever fetched)
+          const historical = this.ratesRepo.getLatestHistoricalRate(
+            holding.asset_symbol,
+            this.baseCurrency
+          );
+          if (historical) {
+            price = historical.price;
+          } else {
+            // 3. Only call CMC API if no historical data exists at all
+            try {
+              price = await this.cmcService.getCurrentPrice(
+                holding.asset_symbol,
+                this.baseCurrency
+              );
+              // Update cache (also saves to historical_rates)
+              this.ratesRepo.updateCachedRate(holding.asset_symbol, price, this.baseCurrency);
+            } catch (error) {
+              Logger.error(
+                `Failed to fetch price for ${holding.asset_symbol}: ${error instanceof Error ? error.message : String(error)}`
+              );
+            }
           }
         }
       }
