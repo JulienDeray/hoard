@@ -3,7 +3,6 @@ import { PortfolioService } from './portfolio.js';
 import { AllocationService } from './allocation.js';
 import { LedgerRepository } from '../database/ledger.js';
 import { RatesRepository } from '../database/rates.js';
-import { Logger } from '../utils/logger.js';
 
 export class QueryProcessor {
   constructor(
@@ -15,39 +14,31 @@ export class QueryProcessor {
   ) {}
 
   async processQuery(userQuery: string): Promise<string> {
-    try {
-      const toolExecutor = async (toolName: string, toolInput: any): Promise<any> => {
-        Logger.debug(`Executing tool: ${toolName} with input: ${JSON.stringify(toolInput)}`);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const toolExecutor = async (toolName: string, toolInput: any): Promise<any> => {
+      switch (toolName) {
+        case 'get_holdings':
+          return await this.getHoldings(toolInput.date);
 
-        switch (toolName) {
-          case 'get_holdings':
-            return await this.getHoldings(toolInput.date);
+        case 'calculate_portfolio_value':
+          return await this.calculatePortfolioValue(toolInput.date);
 
-          case 'calculate_portfolio_value':
-            return await this.calculatePortfolioValue(toolInput.date);
+        case 'get_historical_price':
+          return await this.getHistoricalPrice(toolInput.symbol, toolInput.date);
 
-          case 'get_historical_price':
-            return await this.getHistoricalPrice(toolInput.symbol, toolInput.date);
+        case 'list_snapshots':
+          return this.listSnapshots();
 
-          case 'list_snapshots':
-            return this.listSnapshots();
+        case 'suggest_rebalancing':
+          return await this.suggestRebalancing(toolInput.date, toolInput.tolerance);
 
-          case 'suggest_rebalancing':
-            return await this.suggestRebalancing(toolInput.date, toolInput.tolerance);
+        default:
+          throw new Error(`Unknown tool: ${toolName}`);
+      }
+    };
 
-          default:
-            throw new Error(`Unknown tool: ${toolName}`);
-        }
-      };
-
-      const response = await this.claudeService.processQuery(userQuery, toolExecutor);
-      return response;
-    } catch (error) {
-      Logger.error(
-        `Query processing failed: ${error instanceof Error ? error.message : String(error)}`
-      );
-      throw error;
-    }
+    const response = await this.claudeService.processQuery(userQuery, toolExecutor);
+    return response;
   }
 
   private async getHoldings(date?: string): Promise<any> {

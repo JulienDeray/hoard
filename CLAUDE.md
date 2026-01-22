@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Hoard** is a personal CFO platform — not just tracking, but decision support. It's a TypeScript-based CLI application for multi-asset wealth management with natural language queries powered by Claude AI.
+**Hoard** is a personal CFO platform — not just tracking, but decision support. It's a TypeScript-based web application for multi-asset wealth management with natural language queries powered by Claude AI.
 
 ### Vision
 
@@ -36,28 +36,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - **Language:** TypeScript (ESM modules)
 - **Database:** SQLite with better-sqlite3
-- **CLI Framework:** Commander + @clack/prompts
-- **Web UI:** React 19 + Vite 7 (scaffold in `/web/`)
+- **API:** Fastify REST API
+- **Web UI:** React 19 + Vite 7 (in `/web/`)
 - **APIs:**
   - Anthropic Claude API (natural language processing)
   - CoinMarketCap API (crypto price data)
-- **Key Dependencies:** axios, zod, picocolors, ora, date-fns
+- **Key Dependencies:** axios, zod, date-fns
 
 ## Project Structure
 
 ```
 src/
-├── cli/
-│   ├── index.ts                    # Main CLI entry point with env handling
-│   ├── utils/
-│   │   └── error-handler.ts        # Centralized service error handling
-│   └── commands/
-│       ├── snapshot.ts             # Snapshot management (add/list/view/delete)
-│       ├── query.ts                # Natural language query interface
-│       ├── portfolio.ts            # Portfolio analytics
-│       ├── allocation.ts           # Allocation targets management
-│       ├── migrate.ts              # Database migration command
-│       └── env.ts                  # Environment management
+├── api/
+│   ├── index.ts                    # API entry point
+│   ├── server.ts                   # Fastify server setup
+│   └── routes/                     # API route handlers
 ├── database/
 │   ├── connection.ts               # DatabaseManager singleton
 │   ├── ledger.ts                   # LedgerRepository (snapshots, holdings, assets, liabilities, targets)
@@ -69,7 +62,7 @@ src/
 │       │   ├── 001_initial.sql
 │       │   ├── 002_allocation_targets.sql
 │       │   ├── 003_schema_v2.sql   # Multi-asset schema
-│       │   └── 004_remove_value_eur.sql  # Remove redundant columns (current)
+│       │   └── ...
 │       └── rates/001_initial.sql   # Rates schema
 ├── services/
 │   ├── snapshot.ts                 # Pure service for snapshot operations
@@ -88,13 +81,11 @@ src/
 └── utils/
     ├── config.ts                   # Config management with Conf
     ├── formatters.ts               # European number/Euro formatting
-    ├── logger.ts                   # Chalk-based logger
     └── validators.ts               # Zod validators
 
-web/                                # React + Vite frontend (scaffold)
+web/                                # React + Vite frontend
 scripts/
-├── init.ts                         # Database + config initialization
-└── import-koinly.ts                # Koinly CSV import
+└── migrate.ts                      # Database migration script
 
 data/                               # Runtime SQLite databases (gitignored)
 ├── dev/                            # Development databases
@@ -106,14 +97,12 @@ data/                               # Runtime SQLite databases (gitignored)
 
 docs/
 ├── 01-getting-started.md           # Installation, setup, quick start
-├── 02-user-guide.md                # CLI command reference
+├── 02-user-guide.md                # API and web UI reference
 ├── 03-architecture.md              # System design, data flows
 ├── 04-domain-model.md              # Entities, relationships, schema
 ├── 05-developer-guide.md           # Adding features, conventions
 ├── 06-api-reference.md             # Service interfaces, errors
-├── 07-operations.md                # Migrations, backups, troubleshooting
-├── acceptance-criteria/            # Feature acceptance criteria
-└── koinly-import.md                # Koinly import guide
+└── 07-operations.md                # Migrations, backups, troubleshooting
 ```
 
 ## Domain Model (Schema v7)
@@ -179,28 +168,25 @@ AllocationTarget[]
 - `DatabaseManager.getLedgerDb(path)` - Returns singleton ledger DB instance
 - `DatabaseManager.getRatesDb(path)` - Returns singleton rates DB instance
 - Repositories (`LedgerRepository`, `RatesRepository`) wrap DB operations
-- Migrations must be run explicitly via `npm run dev migrate`
+- Migrations must be run explicitly via `npm run migrate`
 
 ## Common Commands
 
 ```bash
 # Development
-npm run dev [command]              # Run CLI in dev mode with tsx
-npm run dev -- --env prod [command]   # Run against production database
 npm run build                       # Compile TypeScript to dist/
-npm start                           # Run compiled CLI
-
-# Project setup
-npm run init                        # Initialize databases and config
-npm run init:dev                    # Initialize dev environment only
-npm run init:prod                   # Initialize prod environment only
+npm run dev:api                     # Run API server (defaults to dev)
+npm run dev:api:dev                 # Run API server in dev mode
+npm run dev:api:prod                # Run API server in prod mode
+npm run dev:web                     # Run web UI dev server
+npm run dev:all                     # Run both API and web UI
 
 # Database migrations
-npm run dev migrate                 # Run pending migrations (dev)
-npm run dev migrate --dry-run       # Preview migrations without applying
-npm run dev migrate --status        # Show current schema version
-npm run dev migrate --backfill      # Run data backfill operations
-npm run dev -- --env prod migrate      # Run migrations on production
+npm run migrate                     # Run pending migrations (dev)
+npm run migrate -- --env=prod       # Run migrations on production
+npm run migrate -- --dry-run        # Preview migrations without applying
+npm run migrate -- --status         # Show current schema version
+npm run migrate -- --backfill       # Run data backfill operations
 
 # Testing and quality
 npm test                            # Run Vitest tests
@@ -209,26 +195,14 @@ npm test -- --coverage              # With coverage
 npm run lint                        # ESLint
 npm run format                      # Prettier
 
-# Data import
-npm run import-koinly              # Import Koinly CSV snapshots
-
-# CLI commands (via npm run dev)
-snapshot add                        # Interactive snapshot entry
-snapshot list [--assets] [--last N] # List all snapshots
-snapshot view <date>                # View snapshot details
-snapshot delete <date> [symbol]     # Delete snapshot or specific holding
-query "question"                    # Natural language query
-portfolio summary                   # Current portfolio value
-allocation set                      # Set allocation targets
-allocation view                     # View current targets
-allocation compare [-d date]        # Compare current vs target
-allocation clear                    # Clear all targets
-env                                 # Environment management
+# Web UI
+npm run web:dev                     # Start web dev server
+npm run web:build                   # Build web for production
 ```
 
 ## Service Layer Architecture
 
-### Pure Services (Decoupled from CLI)
+### Pure Services (Decoupled from API)
 
 Services return typed errors instead of throwing, making them composable and testable.
 
@@ -308,13 +282,6 @@ NoPortfolioDataError
 PriceFetchError
 ```
 
-### CLI Error Handler (`src/cli/utils/error-handler.ts`)
-
-Centralizes error handling in CLI commands:
-- Maps service errors to user-friendly messages
-- Handles database cleanup
-- Supports custom outro messages and exit codes
-
 ## Claude Code Skills
 
 ### `/validate` - Code Quality Validation
@@ -344,7 +311,7 @@ Manages testing lifecycle for code changes:
 |-------------|------------|
 | `src/services/*.ts` | Business logic, service coordination |
 | `src/database/*.ts` | Database operations with in-memory DB |
-| `src/cli/commands/*.ts` | Command execution, user interaction |
+| `src/api/routes/*.ts` | API endpoint testing |
 | `src/utils/*.ts` | Utility functions |
 
 ## Testing Strategy
@@ -352,27 +319,17 @@ Manages testing lifecycle for code changes:
 Uses Vitest with a testing pyramid approach:
 - **Unit tests**: Services, repositories, utilities (majority)
 - **Integration tests**: Database operations, service coordination
-- **E2E tests**: CLI command execution (fewer)
+- **API tests**: Route handlers, request/response validation
 
 **Test locations:**
 - Service tests: `tests/services/`
 - Repository tests: `tests/database/`
-- CLI tests: `tests/cli/`
+- API tests: `tests/api/`
 - Test helpers: `tests/helpers/`
 
 **Mocking:**
 - External APIs (CoinMarketCap, Claude) are always mocked
 - Database tests use in-memory SQLite (`:memory:`)
-- CLI prompts are mocked using vi.mock
-
-### Acceptance Criteria
-
-Feature acceptance criteria are documented in `docs/acceptance-criteria/`.
-Each feature should have:
-- User story
-- Acceptance criteria in Given/When/Then format
-- Test cases
-- Error handling requirements
 
 ## Important Implementation Details
 
@@ -391,7 +348,7 @@ The project uses a versioned migration system managed by `MigrationRunner`:
 
 - SQL files in `src/database/migrations/ledger/` numbered sequentially (001, 002, 003...)
 - Migrations tracked in `schema_version` table with version number and timestamp
-- Must be run explicitly via `npm run dev migrate`
+- Must be run explicitly via `npm run migrate`
 - Supports dry-run mode to preview changes without applying
 - Creates automatic backup before migration (e.g., `ledger.db.backup.20240115_143052`)
 
@@ -416,26 +373,26 @@ European locale formatting via `src/utils/formatters.ts`:
 ## Adding New Features
 
 ### Adding a New Migration
-1. Create SQL file in `src/database/migrations/ledger/` with next version number (e.g., `007_new_feature.sql`)
+1. Create SQL file in `src/database/migrations/ledger/` with next version number (e.g., `008_new_feature.sql`)
 2. Add migration entry to `MIGRATIONS` array in `src/database/migrations/runner.ts`
 3. Update model interfaces in `src/models/` to match schema changes
 4. Update repository methods in `src/database/ledger.ts`
-5. Test migration: `npm run dev migrate --dry-run`
-6. Apply migration: `npm run dev migrate`
+5. Test migration: `npm run migrate -- --dry-run`
+6. Apply migration: `npm run migrate`
 7. **Update the [Domain Model](https://www.notion.so/julienderay/Domain-Model-2ec3c026f755817689f9ff4acb111000) Notion page** with schema version and entity changes
 
-### Adding a New CLI Command
-1. Create command file in `src/cli/commands/`
-2. Export Command instance with `.action()` handler
-3. Import and register in `src/cli/index.ts` with `program.addCommand()`
-4. Follow pattern: load config → init DBs → execute → close DBs
-5. Use `handleServiceError()` for error handling
+### Adding a New API Endpoint
+1. Create route file in `src/api/routes/`
+2. Define request/response schemas with Zod
+3. Implement route handler using services
+4. Register route in `src/api/server.ts`
+5. Add tests in `tests/api/`
 
 ### Adding a New Service
 1. Create service file in `src/services/`
 2. Define typed error classes in `src/errors/index.ts`
 3. Implement pure functions that return errors instead of throwing
-4. Add corresponding CLI command or integrate with existing commands
+4. Add corresponding API endpoint or integrate with existing endpoints
 
 ### Adding a New Claude Tool
 1. Add tool definition to `TOOL_DEFINITIONS` in `services/claude.ts`
@@ -447,28 +404,9 @@ European locale formatting via `src/utils/formatters.ts`:
 
 - Use ESLint and Prettier (configs in repo root)
 - Prefer async/await over promises
-- Use `Logger` utility instead of `console.log`
 - Close database connections in finally blocks
 - Validate user input with Zod schemas
 - Handle errors gracefully with user-friendly messages
-
-### CLI Output Colors (picocolors)
-
-**IMPORTANT:** Never use `pc.gray()` for terminal output in this project - it's hard to read.
-
-Approved color scheme:
-- `pc.cyan()` - informational messages, details, paths, supplementary info
-- `pc.green()` - success messages, confirmations
-- `pc.yellow()` - warnings, skipped items, things that need attention
-- `pc.red()` - errors, failures
-- `pc.bold()` - headings, emphasis
-- `pc.dim()` - avoid using, use cyan instead
-
-When writing CLI output:
-- Use cyan for any detailed/secondary information
-- Reserve yellow for actual warnings/cautions
-- Use green for successful operations
-- Use red for errors only
 
 ## Troubleshooting
 
@@ -495,7 +433,7 @@ Detailed technical documentation is in the `docs/` folder:
 | Document | Description |
 |----------|-------------|
 | [Getting Started](docs/01-getting-started.md) | Prerequisites, installation, API keys, quick start guide |
-| [User Guide](docs/02-user-guide.md) | Complete CLI command reference with examples |
+| [User Guide](docs/02-user-guide.md) | API and web UI reference |
 | [Architecture](docs/03-architecture.md) | System design, database architecture, service layer, data flows |
 | [Domain Model](docs/04-domain-model.md) | Entities, relationships, schema versioning (v1-v7) |
 | [Developer Guide](docs/05-developer-guide.md) | Adding features, ESM requirements, code conventions, testing |

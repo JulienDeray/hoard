@@ -3,7 +3,6 @@ import { readFileSync, copyFileSync, existsSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { format } from 'date-fns';
-import { Logger } from '../../utils/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -178,7 +177,6 @@ export class MigrationRunner {
     if (currentVersion === 0) {
       const existingVersion = this.detectExistingSchema();
       if (existingVersion > 0) {
-        Logger.info(`Detected existing schema at version ${existingVersion}, marking as applied...`);
         this.markExistingMigrations(existingVersion);
         return MIGRATIONS.filter((m) => m.version > existingVersion);
       }
@@ -201,7 +199,6 @@ export class MigrationRunner {
     }
 
     copyFileSync(this.ledgerPath, backupPath);
-    Logger.success(`Backup created: ${backupPath}`);
 
     return backupPath;
   }
@@ -213,24 +210,14 @@ export class MigrationRunner {
     const startTime = Date.now();
 
     try {
-      if (migration.sql) {
+      if (migration.sql && !dryRun) {
         const sqlPath = join(__dirname, 'ledger', migration.sql);
         const sql = readFileSync(sqlPath, 'utf-8');
-
-        if (dryRun) {
-          Logger.info(`[DRY RUN] Would apply SQL from ${migration.sql}`);
-          Logger.debug(`SQL content:\n${sql.substring(0, 500)}...`);
-        } else {
-          this.ledgerDb.exec(sql);
-        }
+        this.ledgerDb.exec(sql);
       }
 
-      if (migration.run) {
-        if (dryRun) {
-          Logger.info(`[DRY RUN] Would run TypeScript migration function`);
-        } else {
-          await migration.run(this.ledgerDb, this.ratesDb);
-        }
+      if (migration.run && !dryRun) {
+        await migration.run(this.ledgerDb, this.ratesDb);
       }
 
       // Record the migration
@@ -268,26 +255,14 @@ export class MigrationRunner {
     const results: MigrationResult[] = [];
 
     if (pending.length === 0) {
-      Logger.info('No pending migrations');
       return results;
     }
 
-    Logger.info(`Found ${pending.length} pending migration(s)`);
-
     for (const migration of pending) {
-      Logger.info(
-        `${dryRun ? '[DRY RUN] ' : ''}Running migration v${migration.version}: ${migration.description}`
-      );
-
       const result = await this.runMigration(migration, dryRun);
       results.push(result);
 
-      if (result.success) {
-        Logger.success(
-          `${dryRun ? '[DRY RUN] ' : ''}Migration v${migration.version} completed in ${result.duration}ms`
-        );
-      } else {
-        Logger.error(`Migration v${migration.version} failed: ${result.error}`);
+      if (!result.success) {
         // Stop on first failure
         break;
       }

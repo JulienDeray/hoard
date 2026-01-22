@@ -2,7 +2,6 @@ import type { HoldingWithAsset, HoldingWithValue, PriceResult } from '../models/
 import type { LedgerRepository } from '../database/ledger.js';
 import type { RatesRepository } from '../database/rates.js';
 import type { CoinMarketCapService } from './coinmarketcap.js';
-import { Logger } from '../utils/logger.js';
 
 export interface PortfolioSummary {
   date: string;
@@ -96,10 +95,8 @@ export class PortfolioService {
               );
               // Update cache (also saves to historical_rates)
               this.ratesRepo.updateCachedRate(holding.asset_symbol, price, this.baseCurrency);
-            } catch (error) {
-              Logger.error(
-                `Failed to fetch price for ${holding.asset_symbol}: ${error instanceof Error ? error.message : String(error)}`
-              );
+            } catch {
+              // Price fetch failed, value will be undefined
             }
           }
         }
@@ -116,19 +113,10 @@ export class PortfolioService {
   }
 
   async fetchAndCachePrices(symbols: string[]): Promise<void> {
-    try {
-      const prices = await this.cmcService.getMultipleCurrentPrices(symbols, this.baseCurrency);
+    const prices = await this.cmcService.getMultipleCurrentPrices(symbols, this.baseCurrency);
 
-      for (const [symbol, price] of prices.entries()) {
-        this.ratesRepo.updateCachedRate(symbol, price, this.baseCurrency);
-      }
-
-      Logger.success(`Updated prices for ${prices.size} assets`);
-    } catch (error) {
-      Logger.error(
-        `Failed to fetch prices: ${error instanceof Error ? error.message : String(error)}`
-      );
-      throw error;
+    for (const [symbol, price] of prices.entries()) {
+      this.ratesRepo.updateCachedRate(symbol, price, this.baseCurrency);
     }
   }
 

@@ -1,5 +1,5 @@
 ---
-name: Testing Workflow
+name: testing-workflow
 description: Manages testing lifecycle - analyzes changes, creates/updates tests, runs tests, maintains acceptance criteria
 allowed-tools: Read, Write, Edit, Bash, Glob, Grep
 ---

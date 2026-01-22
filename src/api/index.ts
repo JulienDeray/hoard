@@ -3,12 +3,14 @@
 /**
  * API Entry Point
  *
- * Starts the Fastify API server with environment selection.
+ * Starts the Fastify API server with environment selection via HOARD_ENV.
+ *
+ * Usage:
+ *   HOARD_ENV=dev npm run dev:api    # Development environment
+ *   HOARD_ENV=prod npm run dev:api   # Production environment
  */
 
 import { config } from 'dotenv';
-import * as prompts from '@clack/prompts';
-import pc from 'picocolors';
 import { createServer, startServer } from './server.js';
 import { configManager } from '../utils/config.js';
 
@@ -16,39 +18,23 @@ import { configManager } from '../utils/config.js';
 config();
 
 async function main() {
-  // Determine environment
-  let env = process.env.HOARD_ENV as 'dev' | 'prod' | undefined;
+  // Determine environment from HOARD_ENV (default to 'dev')
+  const env = (process.env.HOARD_ENV as 'dev' | 'prod') || 'dev';
 
-  if (!env || !['dev', 'prod'].includes(env)) {
-    // Interactive prompt for environment selection
-    console.log();
-    prompts.intro(pc.cyan('Hoard API Server'));
-
-    const envResult = await prompts.select({
-      message: 'Select environment',
-      options: [
-        { value: 'dev', label: 'Development', hint: 'Uses data/dev/ databases' },
-        { value: 'prod', label: 'Production', hint: 'Uses data/prod/ databases' },
-      ],
-    });
-
-    if (prompts.isCancel(envResult)) {
-      prompts.cancel('Cancelled');
-      process.exit(0);
-    }
-
-    env = envResult as 'dev' | 'prod';
+  if (!['dev', 'prod'].includes(env)) {
+    console.error(`Invalid HOARD_ENV: ${env}. Must be 'dev' or 'prod'.`);
+    process.exit(1);
   }
 
   // Validate configuration
   try {
     if (!configManager.isConfigured()) {
-      console.error(pc.red('Error: API keys not configured.'));
-      console.error(pc.cyan('Please set them in .env or run: npm run init'));
+      console.error('Error: API keys not configured.');
+      console.error('Please set COINMARKETCAP_API_KEY and ANTHROPIC_API_KEY in .env');
       process.exit(1);
     }
   } catch {
-    console.error(pc.red('Configuration error. Please run: npm run init'));
+    console.error('Configuration error. Please check your .env file.');
     process.exit(1);
   }
 
@@ -72,10 +58,10 @@ async function main() {
     // Start server
     await startServer(fastify, port);
 
-    fastify.log.info(pc.green(`API server running in ${env.toUpperCase()} mode`));
-    fastify.log.info(pc.cyan(`Listening on http://localhost:${port}`));
+    fastify.log.info(`API server running in ${env.toUpperCase()} mode`);
+    fastify.log.info(`Listening on http://localhost:${port}`);
   } catch (error) {
-    console.error(pc.red('Failed to start server:'), error);
+    console.error('Failed to start server:', error);
     process.exit(1);
   }
 }

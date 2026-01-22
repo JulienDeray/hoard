@@ -1,5 +1,4 @@
 import axios, { AxiosInstance } from 'axios';
-import { Logger } from '../utils/logger.js';
 
 interface CMCQuoteResponse {
   data: {
@@ -82,81 +81,63 @@ export class CoinMarketCapService {
 
   async getCurrentPrice(symbol: string, baseCurrency = 'EUR'): Promise<number> {
     return this.queueRequest(async () => {
-      try {
-        const response = await this.client.get<CMCQuoteResponse>(
-          '/v2/cryptocurrency/quotes/latest',
-          {
-            params: {
-              symbol,
-              convert: baseCurrency,
-            },
-          }
-        );
-
-        const data = response.data.data[symbol];
-        if (!data) {
-          throw new Error(`No data found for symbol: ${symbol}`);
+      const response = await this.client.get<CMCQuoteResponse>(
+        '/v2/cryptocurrency/quotes/latest',
+        {
+          params: {
+            symbol,
+            convert: baseCurrency,
+          },
         }
+      );
 
-        // Handle both array and single object responses
-        const quoteData = Array.isArray(data) ? data[0] : data;
-
-        if (!quoteData || !quoteData.quote || !quoteData.quote[baseCurrency]) {
-          throw new Error(`No quote data available for ${symbol} in ${baseCurrency}`);
-        }
-
-        return quoteData.quote[baseCurrency].price;
-      } catch (error) {
-        if (axios.isAxiosError(error)) {
-          Logger.error(
-            `CoinMarketCap API error: ${error.response?.data?.status?.error_message || error.message}`
-          );
-        }
-        throw error;
+      const data = response.data.data[symbol];
+      if (!data) {
+        throw new Error(`No data found for symbol: ${symbol}`);
       }
+
+      // Handle both array and single object responses
+      const quoteData = Array.isArray(data) ? data[0] : data;
+
+      if (!quoteData || !quoteData.quote || !quoteData.quote[baseCurrency]) {
+        throw new Error(`No quote data available for ${symbol} in ${baseCurrency}`);
+      }
+
+      return quoteData.quote[baseCurrency].price;
     });
   }
 
   async getCurrentPriceData(symbol: string, baseCurrency = 'EUR'): Promise<PriceData> {
     return this.queueRequest(async () => {
-      try {
-        const response = await this.client.get<CMCQuoteResponse>(
-          '/v2/cryptocurrency/quotes/latest',
-          {
-            params: {
-              symbol,
-              convert: baseCurrency,
-            },
-          }
-        );
-
-        const data = response.data.data[symbol];
-        if (!data) {
-          throw new Error(`No data found for symbol: ${symbol}`);
+      const response = await this.client.get<CMCQuoteResponse>(
+        '/v2/cryptocurrency/quotes/latest',
+        {
+          params: {
+            symbol,
+            convert: baseCurrency,
+          },
         }
+      );
 
-        // Handle both array and single object responses
-        const quoteData = Array.isArray(data) ? data[0] : data;
-
-        if (!quoteData || !quoteData.quote || !quoteData.quote[baseCurrency]) {
-          throw new Error(`No quote data available for ${symbol} in ${baseCurrency}`);
-        }
-
-        const quote = quoteData.quote[baseCurrency];
-        return {
-          price: quote.price,
-          volume_24h: quote.volume_24h,
-          market_cap: quote.market_cap,
-          timestamp: quote.last_updated,
-        };
-      } catch (error) {
-        if (axios.isAxiosError(error)) {
-          Logger.error(
-            `CoinMarketCap API error: ${error.response?.data?.status?.error_message || error.message}`
-          );
-        }
-        throw error;
+      const data = response.data.data[symbol];
+      if (!data) {
+        throw new Error(`No data found for symbol: ${symbol}`);
       }
+
+      // Handle both array and single object responses
+      const quoteData = Array.isArray(data) ? data[0] : data;
+
+      if (!quoteData || !quoteData.quote || !quoteData.quote[baseCurrency]) {
+        throw new Error(`No quote data available for ${symbol} in ${baseCurrency}`);
+      }
+
+      const quote = quoteData.quote[baseCurrency];
+      return {
+        price: quote.price,
+        volume_24h: quote.volume_24h,
+        market_cap: quote.market_cap,
+        timestamp: quote.last_updated,
+      };
     });
   }
 
@@ -165,38 +146,29 @@ export class CoinMarketCapService {
     baseCurrency = 'EUR'
   ): Promise<Map<string, number>> {
     return this.queueRequest(async () => {
-      try {
-        const response = await this.client.get<CMCQuoteResponse>(
-          '/v2/cryptocurrency/quotes/latest',
-          {
-            params: {
-              symbol: symbols.join(','),
-              convert: baseCurrency,
-            },
-          }
-        );
+      const response = await this.client.get<CMCQuoteResponse>(
+        '/v2/cryptocurrency/quotes/latest',
+        {
+          params: {
+            symbol: symbols.join(','),
+            convert: baseCurrency,
+          },
+        }
+      );
 
-        const prices = new Map<string, number>();
-        for (const symbol of symbols) {
-          const data = response.data.data[symbol];
-          if (data) {
-            // Handle both array and single object responses
-            const quoteData = Array.isArray(data) ? data[0] : data;
-            if (quoteData && quoteData.quote && quoteData.quote[baseCurrency]) {
-              prices.set(symbol, quoteData.quote[baseCurrency].price);
-            }
+      const prices = new Map<string, number>();
+      for (const symbol of symbols) {
+        const data = response.data.data[symbol];
+        if (data) {
+          // Handle both array and single object responses
+          const quoteData = Array.isArray(data) ? data[0] : data;
+          if (quoteData && quoteData.quote && quoteData.quote[baseCurrency]) {
+            prices.set(symbol, quoteData.quote[baseCurrency].price);
           }
         }
-
-        return prices;
-      } catch (error) {
-        if (axios.isAxiosError(error)) {
-          Logger.error(
-            `CoinMarketCap API error: ${error.response?.data?.status?.error_message || error.message}`
-          );
-        }
-        throw error;
       }
+
+      return prices;
     });
   }
 
@@ -206,38 +178,28 @@ export class CoinMarketCapService {
     baseCurrency = 'EUR'
   ): Promise<number | undefined> {
     return this.queueRequest(async () => {
-      try {
-        // Format date as YYYY-MM-DD
-        const dateStr = date.toISOString().split('T')[0];
+      // Format date as YYYY-MM-DD
+      const dateStr = date.toISOString().split('T')[0];
 
-        const response = await this.client.get<CMCHistoricalResponse>(
-          '/v2/cryptocurrency/quotes/historical',
-          {
-            params: {
-              symbol,
-              time_start: dateStr,
-              time_end: dateStr,
-              convert: baseCurrency,
-              count: 1,
-            },
-          }
-        );
-
-        const quotes = response.data.data.quotes;
-        if (!quotes || quotes.length === 0) {
-          Logger.warn(`No historical data found for ${symbol} on ${dateStr}`);
-          return undefined;
+      const response = await this.client.get<CMCHistoricalResponse>(
+        '/v2/cryptocurrency/quotes/historical',
+        {
+          params: {
+            symbol,
+            time_start: dateStr,
+            time_end: dateStr,
+            convert: baseCurrency,
+            count: 1,
+          },
         }
+      );
 
-        return quotes[0].quote[baseCurrency].price;
-      } catch (error) {
-        if (axios.isAxiosError(error)) {
-          Logger.error(
-            `CoinMarketCap API error: ${error.response?.data?.status?.error_message || error.message}`
-          );
-        }
-        throw error;
+      const quotes = response.data.data.quotes;
+      if (!quotes || quotes.length === 0) {
+        return undefined;
       }
+
+      return quotes[0].quote[baseCurrency].price;
     });
   }
 
@@ -248,39 +210,30 @@ export class CoinMarketCapService {
     baseCurrency = 'EUR'
   ): Promise<PriceData[]> {
     return this.queueRequest(async () => {
-      try {
-        const response = await this.client.get<CMCHistoricalResponse>(
-          '/v2/cryptocurrency/quotes/historical',
-          {
-            params: {
-              symbol,
-              time_start: startDate.toISOString(),
-              time_end: endDate.toISOString(),
-              convert: baseCurrency,
-              interval: 'daily',
-            },
-          }
-        );
-
-        const quotes = response.data.data.quotes;
-        if (!quotes) {
-          return [];
+      const response = await this.client.get<CMCHistoricalResponse>(
+        '/v2/cryptocurrency/quotes/historical',
+        {
+          params: {
+            symbol,
+            time_start: startDate.toISOString(),
+            time_end: endDate.toISOString(),
+            convert: baseCurrency,
+            interval: 'daily',
+          },
         }
+      );
 
-        return quotes.map((q) => ({
-          price: q.quote[baseCurrency].price,
-          volume_24h: q.quote[baseCurrency].volume_24h,
-          market_cap: q.quote[baseCurrency].market_cap,
-          timestamp: q.timestamp,
-        }));
-      } catch (error) {
-        if (axios.isAxiosError(error)) {
-          Logger.error(
-            `CoinMarketCap API error: ${error.response?.data?.status?.error_message || error.message}`
-          );
-        }
-        throw error;
+      const quotes = response.data.data.quotes;
+      if (!quotes) {
+        return [];
       }
+
+      return quotes.map((q) => ({
+        price: q.quote[baseCurrency].price,
+        volume_24h: q.quote[baseCurrency].volume_24h,
+        market_cap: q.quote[baseCurrency].market_cap,
+        timestamp: q.timestamp,
+      }));
     });
   }
 
@@ -316,12 +269,7 @@ export class CoinMarketCapService {
           currentPrice: quote?.quote?.[baseCurrency]?.price,
           marketCap: quote?.quote?.[baseCurrency]?.market_cap,
         };
-      } catch (error) {
-        if (axios.isAxiosError(error)) {
-          Logger.error(
-            `CoinMarketCap API error: ${error.response?.data?.status?.error_message || error.message}`
-          );
-        }
+      } catch {
         return null;
       }
     });
@@ -355,12 +303,7 @@ export class CoinMarketCapService {
           currentPrice: quoteData?.quote?.[baseCurrency]?.price,
           marketCap: quoteData?.quote?.[baseCurrency]?.market_cap,
         };
-      } catch (error) {
-        if (axios.isAxiosError(error)) {
-          Logger.error(
-            `CoinMarketCap API error: ${error.response?.data?.status?.error_message || error.message}`
-          );
-        }
+      } catch {
         return null;
       }
     });
