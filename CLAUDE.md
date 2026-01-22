@@ -32,16 +32,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 4. **Fun, not tedious** — Pixel art aesthetic planned (v5)
 5. **Offline-first** — Financial data stays local; APIs are for market data only
 
-## Roadmap Status
-
-| Phase | Focus | Status |
-|-------|-------|--------|
-| v1 - Foundation | Core CLI with snapshots, allocations, NLQ | ✅ Done |
-| v2 - UI Foundation | Schema cleanup + web UI | 🎯 Current |
-| v3 - Multi-Asset | ETFs, real estate, liabilities, net worth | Planned |
-| v4 - Analytics | Monthly review dashboard, scenario modeling | Planned |
-| v5 - Gamification | Pixel art aesthetic, achievements | Planned |
-
 ## Tech Stack
 
 - **Language:** TypeScript (ESM modules)
@@ -115,11 +105,18 @@ data/                               # Runtime SQLite databases (gitignored)
 └── validate/                       # Build, lint, test validation
 
 docs/
+├── 01-getting-started.md           # Installation, setup, quick start
+├── 02-user-guide.md                # CLI command reference
+├── 03-architecture.md              # System design, data flows
+├── 04-domain-model.md              # Entities, relationships, schema
+├── 05-developer-guide.md           # Adding features, conventions
+├── 06-api-reference.md             # Service interfaces, errors
+├── 07-operations.md                # Migrations, backups, troubleshooting
 ├── acceptance-criteria/            # Feature acceptance criteria
 └── koinly-import.md                # Koinly import guide
 ```
 
-## Domain Model (Schema v6)
+## Domain Model (Schema v7)
 
 ### Core Entities
 
@@ -398,7 +395,7 @@ The project uses a versioned migration system managed by `MigrationRunner`:
 - Supports dry-run mode to preview changes without applying
 - Creates automatic backup before migration (e.g., `ledger.db.backup.20240115_143052`)
 
-**Current schema version:** v4 (removed redundant value_eur columns)
+**Current schema version:** v7 (see [Domain Model](docs/04-domain-model.md) for migration history)
 
 ### Number Formatting
 
@@ -490,6 +487,20 @@ When writing CLI output:
 **Claude API errors:**
 - Verify ANTHROPIC_API_KEY is set
 - Check model name is valid (currently using `claude-3-5-sonnet-20241022`)
+
+## Technical Documentation
+
+Detailed technical documentation is in the `docs/` folder:
+
+| Document | Description |
+|----------|-------------|
+| [Getting Started](docs/01-getting-started.md) | Prerequisites, installation, API keys, quick start guide |
+| [User Guide](docs/02-user-guide.md) | Complete CLI command reference with examples |
+| [Architecture](docs/03-architecture.md) | System design, database architecture, service layer, data flows |
+| [Domain Model](docs/04-domain-model.md) | Entities, relationships, schema versioning (v1-v7) |
+| [Developer Guide](docs/05-developer-guide.md) | Adding features, ESM requirements, code conventions, testing |
+| [API Reference](docs/06-api-reference.md) | Service interfaces, repository methods, error codes, Claude tools |
+| [Operations](docs/07-operations.md) | Migrations, backups, rate limiting, troubleshooting |
 
 ## External Documentation
 
