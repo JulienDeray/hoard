@@ -102,10 +102,10 @@ export async function snapshotRoutes(fastify: FastifyInstance): Promise<void> {
           const realEstateSummary = fastify.services.propertyService.getRealEstateSummary();
           const totalAssets = holdingsTotal + realEstateSummary.totalEquity;
           const liabilityBalances = fastify.services.ledgerRepo.getLiabilityBalancesBySnapshotId(snapshot.id);
-          const totalLiabilities = liabilityBalances.reduce(
-            (sum, lb) => sum + (lb.outstanding_amount ?? 0),
-            0
-          );
+          // Exclude mortgages from totalLiabilities - they're already accounted for in real estate equity
+          const totalLiabilities = liabilityBalances
+            .filter((lb) => lb.liability_type !== 'MORTGAGE')
+            .reduce((sum, lb) => sum + (lb.outstanding_amount ?? 0), 0);
           const netWorth = totalAssets - totalLiabilities;
 
           // Save to cache
@@ -193,11 +193,10 @@ export async function snapshotRoutes(fastify: FastifyInstance): Promise<void> {
       // Add real estate equity to total assets
       const realEstateSummary = fastify.services.propertyService.getRealEstateSummary();
       const calculatedTotalAssets = holdingsTotal + realEstateSummary.totalEquity;
-      // Liabilities are all in EUR, use outstanding_amount directly
-      const totalLiabilities = result.liabilityBalances.reduce(
-        (sum, lb) => sum + (lb.outstanding_amount ?? 0),
-        0
-      );
+      // Exclude mortgages from totalLiabilities - they're already accounted for in real estate equity
+      const totalLiabilities = result.liabilityBalances
+        .filter((lb) => lb.liability_type !== 'MORTGAGE')
+        .reduce((sum, lb) => sum + (lb.outstanding_amount ?? 0), 0);
       const netWorth = calculatedTotalAssets - totalLiabilities;
 
       // Save calculated totals to cache

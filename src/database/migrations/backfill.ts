@@ -9,7 +9,9 @@ export interface BackfillResult {
 
 /**
  * Clear all snapshot totals cache entries
- * Forces recalculation which now includes real estate equity
+ * Forces recalculation which now:
+ * - Includes real estate equity
+ * - Excludes mortgages from totalLiabilities (they're already in real estate equity)
  */
 function clearSnapshotTotalsCache(ledgerDb: Database.Database): BackfillResult {
   const stmt = ledgerDb.prepare('DELETE FROM snapshot_totals_cache');
@@ -31,7 +33,8 @@ export async function runAllBackfills(
 ): Promise<{
   snapshots: BackfillResult;
 }> {
-  // Clear snapshot totals cache so they get recalculated with real estate equity
+  // Clear snapshot totals cache so they get recalculated with correct values
+  // (real estate equity included, mortgages excluded from liabilities to prevent double-counting)
   const cacheResult = clearSnapshotTotalsCache(ledgerDb);
 
   return {
